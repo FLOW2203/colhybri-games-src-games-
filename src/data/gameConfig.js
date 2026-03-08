@@ -371,5 +371,5 @@ export function getGamesByPriority(priority) {
 // getAvailableGames() — returns P1 games only (MVP)
 // ---------------------------------------------------------------------------
 export function getAvailableGames() {
-  return getGamesByPriority('P1');
+  return [...getGamesByPriority('P1'), ...getGamesByPriority('P2')];
 }

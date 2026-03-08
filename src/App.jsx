@@ -25,6 +25,15 @@ const gameComponents = {
   '24': lazy(() => import('./games/GameNidDukdukdiya')),
   '25': lazy(() => import('./games/GameBouclierHeigig')),
   '26': lazy(() => import('./games/GameEveilleur')),
+  // P2 games
+  '03': lazy(() => import('./games/GameReverseFlight')),
+  '06': lazy(() => import('./games/Game300Cheeseburgers')),
+  '11': lazy(() => import('./games/GameZeroJalousie')),
+  '12': lazy(() => import('./games/GamePerroquetComprend')),
+  '17': lazy(() => import('./games/Game11Litres')),
+  '20': lazy(() => import('./games/GameDortoirA6')),
+  '21': lazy(() => import('./games/GameHelpersNest')),
+  '22': lazy(() => import('./games/GameSuperDisperseur')),
 };
 
 function LoadingScreen() {
