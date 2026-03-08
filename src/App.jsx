@@ -34,6 +34,11 @@ const gameComponents = {
   '20': lazy(() => import('./games/GameDortoirA6')),
   '21': lazy(() => import('./games/GameHelpersNest')),
   '22': lazy(() => import('./games/GameSuperDisperseur')),
+  // P3 games
+  '07': lazy(() => import('./games/GameSuperBrain')),
+  '08': lazy(() => import('./games/GameTimbreExpress')),
+  '18': lazy(() => import('./games/GameEcolePelicans')),
+  '23': lazy(() => import('./games/GameRadiateurNaturel')),
 };
 
 function LoadingScreen() {
