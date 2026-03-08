@@ -157,89 +157,33 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
   useTouch(canvasRef, { onSwipe: handleSwipe, onTap: handleTap });
 
   const drawPelican = useCallback((ctx, x, y, scale, isElder, bobAngle) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(scale, scale);
-
-    // Body
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 30, 20, 0, 0, Math.PI * 2);
-    ctx.fillStyle = isElder ? '#e8dcc8' : '#f0e6d4';
-    ctx.fill();
-
-    // Head
-    ctx.beginPath();
-    ctx.arc(28, -18, 14, 0, Math.PI * 2);
-    ctx.fillStyle = isElder ? '#e8dcc8' : '#f0e6d4';
-    ctx.fill();
-
+    ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
+    const col = isElder ? '#e8dcc8' : '#f0e6d4';
+    // Body + head
+    ctx.beginPath(); ctx.ellipse(0, 0, 30, 20, 0, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+    ctx.beginPath(); ctx.arc(28, -18, 14, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
     // Eye
-    ctx.beginPath();
-    ctx.arc(33, -22, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#222';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(34, -23, 1.2, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
-
-    // Beak (long pelican beak with pouch)
-    ctx.beginPath();
-    ctx.moveTo(40, -18);
-    ctx.lineTo(70, -14);
-    ctx.lineTo(68, -8);
-    ctx.quadraticCurveTo(55, 2 + Math.sin(bobAngle) * 3, 38, -10);
-    ctx.closePath();
-    ctx.fillStyle = '#e8a832';
-    ctx.fill();
-    ctx.strokeStyle = '#c48a20';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Pouch
-    ctx.beginPath();
-    ctx.moveTo(42, -10);
+    ctx.beginPath(); ctx.arc(33, -22, 3, 0, Math.PI * 2); ctx.fillStyle = '#222'; ctx.fill();
+    ctx.beginPath(); ctx.arc(34, -23, 1.2, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    // Beak with pouch
+    ctx.beginPath(); ctx.moveTo(40, -18); ctx.lineTo(70, -14); ctx.lineTo(68, -8);
+    ctx.quadraticCurveTo(55, 2 + Math.sin(bobAngle) * 3, 38, -10); ctx.closePath();
+    ctx.fillStyle = '#e8a832'; ctx.fill();
+    ctx.strokeStyle = '#c48a20'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(42, -10);
     ctx.quadraticCurveTo(55, 5 + Math.sin(bobAngle) * 4, 66, -10);
-    ctx.strokeStyle = '#c48a20';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // Wing
-    ctx.beginPath();
-    ctx.ellipse(-8, -2, 22, 12, -0.2, 0, Math.PI * 2);
-    ctx.fillStyle = isElder ? '#d4c8b4' : '#e0d6c6';
-    ctx.fill();
-
-    // Tail
-    ctx.beginPath();
-    ctx.moveTo(-28, -2);
-    ctx.lineTo(-42, -10);
-    ctx.lineTo(-38, 0);
-    ctx.lineTo(-42, 8);
-    ctx.closePath();
-    ctx.fillStyle = isElder ? '#c0b4a0' : '#d4c8b8';
-    ctx.fill();
-
+    ctx.strokeStyle = '#c48a20'; ctx.lineWidth = 1.5; ctx.stroke();
+    // Wing + tail
+    ctx.beginPath(); ctx.ellipse(-8, -2, 22, 12, -0.2, 0, Math.PI * 2);
+    ctx.fillStyle = isElder ? '#d4c8b4' : '#e0d6c6'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-28, -2); ctx.lineTo(-42, -10); ctx.lineTo(-38, 0);
+    ctx.lineTo(-42, 8); ctx.closePath(); ctx.fillStyle = isElder ? '#c0b4a0' : '#d4c8b8'; ctx.fill();
     // Feet
-    ctx.strokeStyle = '#d4842a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-5, 18);
-    ctx.lineTo(-8, 28);
-    ctx.moveTo(-8, 28);
-    ctx.lineTo(-14, 30);
-    ctx.moveTo(-8, 28);
-    ctx.lineTo(-4, 31);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(8, 18);
-    ctx.lineTo(5, 28);
-    ctx.moveTo(5, 28);
-    ctx.lineTo(-1, 30);
-    ctx.moveTo(5, 28);
-    ctx.lineTo(9, 31);
-    ctx.stroke();
-
+    ctx.strokeStyle = '#d4842a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-5, 18); ctx.lineTo(-8, 28);
+    ctx.moveTo(-8, 28); ctx.lineTo(-14, 30); ctx.moveTo(-8, 28); ctx.lineTo(-4, 31); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(8, 18); ctx.lineTo(5, 28);
+    ctx.moveTo(5, 28); ctx.lineTo(-1, 30); ctx.moveTo(5, 28); ctx.lineTo(9, 31); ctx.stroke();
     ctx.restore();
   }, []);
 
