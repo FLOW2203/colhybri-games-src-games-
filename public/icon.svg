@@ -1,4 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="64" fill="#0A0F1C"/>
-  <text x="256" y="340" text-anchor="middle" font-size="280" font-family="sans-serif">&#x1F426;</text>
+  <!-- Colibri silhouette -->
+  <g transform="translate(256,240) scale(1.8)" fill="#10B981">
+    <!-- Body -->
+    <ellipse cx="0" cy="10" rx="28" ry="45" transform="rotate(-15)"/>
+    <!-- Head -->
+    <circle cx="18" cy="-40" r="20"/>
+    <!-- Long beak -->
+    <polygon points="38,-45 85,-55 38,-40"/>
+    <!-- Eye -->
+    <circle cx="24" cy="-43" r="4" fill="#0A0F1C"/>
+    <!-- Wing spread -->
+    <path d="M-10,-5 Q-70,-60 -50,-20 Q-80,-40 -55,0 Q-75,-10 -45,15 Z" fill="#059669"/>
+    <!-- Tail -->
+    <path d="M-15,45 Q-40,80 -20,85 Q-10,70 -5,50 Z"/>
+    <path d="M-10,48 Q-25,90 -5,88 Q0,72 2,52 Z"/>
+  </g>
+  <!-- CG text -->
+  <text x="256" y="460" text-anchor="middle" font-size="60" font-weight="bold" font-family="sans-serif" fill="#10B981" letter-spacing="8">COLHYBRI</text>
 </svg>

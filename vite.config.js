@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       manifest: {
         name: 'COLHYBRI GAMES',
-        short_name: 'Colhybri',
+        short_name: 'COLHYBRI',
         description: '1 fait scientifique = 1 jeu',
-        theme_color: '#0A0F1C',
+        theme_color: '#10B981',
         background_color: '#0A0F1C',
         display: 'standalone',
         orientation: 'portrait',
