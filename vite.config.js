@@ -27,6 +27,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/games/index.html',
+        navigateFallbackDenylist: [/\.(?:js|css|png|svg|ico|woff2|json|webmanifest)$/],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
