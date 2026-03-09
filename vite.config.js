@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/games/',
   plugins: [
     react(),
     tailwindcss(),
@@ -17,9 +18,11 @@ export default defineConfig({
         background_color: '#0A0F1C',
         display: 'standalone',
         orientation: 'portrait',
+        start_url: '/games/',
+        scope: '/games/',
         icons: [
-          { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
-          { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
+          { src: '/games/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+          { src: '/games/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
         ]
       },
       workbox: {
