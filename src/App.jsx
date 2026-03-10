@@ -180,6 +180,7 @@ export default function App() {
               lesson={currentGameId && LESSONS[currentGameId] ? t(LESSONS[currentGameId]) : ''}
               fact={currentFact ? t(currentFact.fact) : ''}
               factSource={currentFact ? currentFact.source : ''}
+              gameName={currentGameId && GAME_NAMES[currentGameId] ? t(GAME_NAMES[currentGameId]) : ''}
               onReplay={handleReplay}
               onChallenge={() => {}}
               onMenu={handleBack}

@@ -14,7 +14,7 @@ function Confetti() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const colors = ['#2EEAA3', '#FFD700', '#FF6B6B', '#60A5FA', '#A78BFA', '#F472B6'];
+    const colors = ['#0D9488', '#F59E0B', '#0EA5E9', '#10B981', '#FFD700', '#F472B6'];
     const pieces = Array.from({ length: 120 }, () => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height - canvas.height,
@@ -87,11 +87,24 @@ export default function GamePostScreen({
   lesson,
   fact,
   factSource,
+  gameName,
   onReplay,
   onChallenge,
   onMenu,
 }) {
   const { t } = useLocale();
+
+  const handleShare = async () => {
+    const text = `${gameName ? gameName + ' — ' : ''}${score} pts! 🎮 Chaque geste compte.`;
+    const url = 'https://colhybri.com/games';
+    if (navigator.share) {
+      try { await navigator.share({ text, url }); } catch {}
+    } else {
+      try { await navigator.clipboard.writeText(`${text} ${url}`); } catch {
+        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+      }
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0A0F1C] overflow-y-auto py-8 px-4">
@@ -113,7 +126,7 @@ export default function GamePostScreen({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="text-[#FFD700] font-bold mt-1 text-lg"
+            className="text-[#F59E0B] font-bold mt-1 text-lg"
           >
             {t(UI_STRINGS.newRecord)}
           </motion.p>
@@ -128,7 +141,7 @@ export default function GamePostScreen({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="flex items-center gap-2 mb-6 text-[#2EEAA3] text-2xl font-bold"
+        className="flex items-center gap-2 mb-6 text-[#10B981] text-2xl font-bold"
       >
         <span>💧</span>
         <span>+<AnimatedCounter target={points} /></span>
@@ -154,7 +167,7 @@ export default function GamePostScreen({
           transition={{ delay: 0.7 }}
           className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-5 max-w-sm w-full mb-8"
         >
-          <p className="text-[#2EEAA3] font-bold text-xs uppercase tracking-widest mb-2">
+          <p className="text-[#0D9488] font-bold text-xs uppercase tracking-widest mb-2">
             {t(UI_STRINGS.didYouKnow)}
           </p>
           <p className="text-white/80 text-sm leading-relaxed">{fact}</p>
@@ -173,13 +186,19 @@ export default function GamePostScreen({
       >
         <button
           onClick={onReplay}
-          className="w-full py-3 rounded-xl font-bold text-[#0A0F1C] bg-[#2EEAA3] hover:brightness-110 transition-all active:scale-95"
+          className="w-full py-3 rounded-xl font-bold text-white bg-[#0D9488] hover:brightness-110 transition-all active:scale-95"
         >
           {t(UI_STRINGS.replay)}
         </button>
         <button
+          onClick={handleShare}
+          className="w-full py-3 rounded-xl font-bold text-[#0A0F1C] bg-[#F59E0B] hover:brightness-110 transition-all active:scale-95"
+        >
+          {t(UI_STRINGS.share)} 📤
+        </button>
+        <button
           onClick={onChallenge}
-          className="w-full py-3 rounded-xl font-bold text-[#0A0F1C] bg-[#FFD700] hover:brightness-110 transition-all active:scale-95"
+          className="w-full py-3 rounded-xl font-bold text-white bg-[#0EA5E9] hover:brightness-110 transition-all active:scale-95"
         >
           {t(UI_STRINGS.challenge)}
         </button>

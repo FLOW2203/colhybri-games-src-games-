@@ -11,6 +11,11 @@ export const COLORS = {
   gray: '#9CA3AF',
   red: '#EF4444',
   green: '#22C55E',
+  // COLHYBRI Brand Palette
+  teal: '#0D9488',
+  amber: '#F59E0B',
+  sky: '#0EA5E9',
+  emerald: '#10B981',
 };
 
 export const GAMES = [
