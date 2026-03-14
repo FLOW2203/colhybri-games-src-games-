@@ -2,11 +2,13 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 15;
 const TOTAL_TOKENS = 10;
-const POOL_SIZE = 100;
+const POOL_SIZE = 120;
 
 export default function Game10sur10({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -14,20 +16,16 @@ export default function Game10sur10({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
     tokensGiven: 0,
     currentToken: {
-      active: true,
-      x: 0, y: 0,
-      targetX: 0, targetY: 0,
-      grabbed: false,
-      flying: false,
-      flyProgress: 0,
-      startX: 0, startY: 0,
-      endX: 0, endY: 0,
-      spawnTime: 0,
+      active: true, x: 0, y: 0,
+      grabbed: false, flying: false, flyProgress: 0,
+      startX: 0, startY: 0, endX: 0, endY: 0, spawnTime: 0,
     },
     multiplier: 1.0,
     lastGiveTime: 0,
@@ -37,36 +35,45 @@ export default function Game10sur10({ onComplete, onBack }) {
     feedbackTimer: 0,
     particles: Array(POOL_SIZE).fill(null).map(() => ({
       active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0,
-      r: 0, g: 0, b: 0, size: 0,
+      r: 0, g: 0, b: 0, size: 0, type: 'dot',
     })),
-    trailParticles: Array(40).fill(null).map(() => ({
-      active: false, x: 0, y: 0, life: 0, maxLife: 0, size: 0, alpha: 0,
+    trailParticles: Array(60).fill(null).map(() => ({
+      active: false, x: 0, y: 0, life: 0, maxLife: 0, size: 0, alpha: 0, hue: 0,
     })),
-    dragX: 0,
-    dragY: 0,
-    isDragging: false,
+    shockwaves: [],
+    floatingTexts: [],
+    dragX: 0, dragY: 0, isDragging: false,
     tokenAngle: 0,
-    leftParrotBob: 0,
-    rightParrotBob: 0,
+    leftParrotBob: 0, rightParrotBob: 0,
     tokenScale: 1,
+    // Background leaves
+    leaves: Array(15).fill(null).map(() => ({
+      x: Math.random(), y: Math.random(), size: 3 + Math.random() * 8,
+      speed: 0.01 + Math.random() * 0.03, phase: Math.random() * Math.PI * 2,
+      rotation: Math.random() * Math.PI * 2,
+    })),
   });
 
-  const spawnParticles = useCallback((cx, cy, count, r, g, b) => {
+  const spawnParticles = useCallback((cx, cy, count, r, g, b, opts = {}) => {
     const s = state.current;
     let spawned = 0;
     for (let i = 0; i < s.particles.length && spawned < count; i++) {
       const p = s.particles[i];
       if (!p.active) {
         p.active = true;
-        p.x = cx; p.y = cy;
+        p.x = cx + (Math.random() - 0.5) * (opts.spread || 0);
+        p.y = cy + (Math.random() - 0.5) * (opts.spread || 0);
         const angle = Math.random() * Math.PI * 2;
-        const speed = 50 + Math.random() * 150;
+        const speed = (opts.minSpeed || 50) + Math.random() * (opts.maxSpeed || 200);
         p.vx = Math.cos(angle) * speed;
-        p.vy = Math.sin(angle) * speed;
-        p.life = 0.3 + Math.random() * 0.5;
+        p.vy = Math.sin(angle) * speed - (opts.upBias || 0);
+        p.life = (opts.minLife || 0.3) + Math.random() * (opts.maxLife || 0.6);
         p.maxLife = p.life;
-        p.r = r; p.g = g; p.b = b;
-        p.size = 2 + Math.random() * 4;
+        p.r = r + Math.floor((Math.random() - 0.5) * 20);
+        p.g = g + Math.floor((Math.random() - 0.5) * 20);
+        p.b = b + Math.floor((Math.random() - 0.5) * 20);
+        p.size = (opts.minSize || 2) + Math.random() * (opts.maxSize || 5);
+        p.type = opts.type || (Math.random() > 0.5 ? 'line' : 'dot');
         spawned++;
       }
     }
@@ -78,11 +85,13 @@ export default function Game10sur10({ onComplete, onBack }) {
       const p = s.trailParticles[i];
       if (!p.active) {
         p.active = true;
-        p.x = x; p.y = y;
-        p.life = 0.3 + Math.random() * 0.2;
+        p.x = x + (Math.random() - 0.5) * 6;
+        p.y = y + (Math.random() - 0.5) * 6;
+        p.life = 0.25 + Math.random() * 0.2;
         p.maxLife = p.life;
-        p.size = 4 + Math.random() * 6;
-        p.alpha = 0.6;
+        p.size = 3 + Math.random() * 8;
+        p.alpha = 0.7;
+        p.hue = 30 + Math.random() * 20; // gold-orange range
         break;
       }
     }
@@ -93,7 +102,7 @@ export default function Game10sur10({ onComplete, onBack }) {
     const t = s.currentToken;
     t.active = true;
     t.x = w * 0.3;
-    t.y = h * 0.5 + (Math.random() - 0.5) * 80;
+    t.y = h * 0.5 + (Math.random() - 0.5) * 60;
     t.grabbed = false;
     t.flying = false;
     t.flyProgress = 0;
@@ -105,7 +114,6 @@ export default function Game10sur10({ onComplete, onBack }) {
     const s = state.current;
     const t = s.currentToken;
     if (!t.active || t.flying) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -113,131 +121,149 @@ export default function Game10sur10({ onComplete, onBack }) {
     const ly = y - rect.top;
 
     if (!s.isDragging) {
-      const dx = lx - t.x;
-      const dy = ly - t.y;
-      if (Math.sqrt(dx * dx + dy * dy) < 50) {
+      const dx = lx - t.x, dy = ly - t.y;
+      if (Math.sqrt(dx * dx + dy * dy) < 55) {
         s.isDragging = true;
         t.grabbed = true;
+        haptics.tapFeedback();
       }
     }
-
     if (s.isDragging) {
-      s.dragX = lx;
-      s.dragY = ly;
-      t.x = lx;
-      t.y = ly;
+      s.dragX = lx; s.dragY = ly;
+      t.x = lx; t.y = ly;
       spawnTrail(lx, ly);
     }
-  }, [phase, spawnTrail]);
+  }, [phase, haptics, spawnTrail]);
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') { setPhase('playing'); haptics.tapFeedback(); }
       return;
     }
     const s = state.current;
     const t = s.currentToken;
     if (!t.active || t.flying) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const lx = x - rect.left;
-    const ly = y - rect.top;
-
-    const dx = lx - t.x;
-    const dy = ly - t.y;
-    if (Math.sqrt(dx * dx + dy * dy) < 50) {
-      t.grabbed = true;
-      t.flying = true;
-      t.startX = t.x;
-      t.startY = t.y;
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      t.endX = w * 0.82;
-      t.endY = h * 0.45;
+    const lx = x - rect.left, ly = y - rect.top;
+    const dx = lx - t.x, dy = ly - t.y;
+    if (Math.sqrt(dx * dx + dy * dy) < 55) {
+      t.grabbed = true; t.flying = true;
+      t.startX = t.x; t.startY = t.y;
+      const w = window.innerWidth, h = window.innerHeight;
+      t.endX = w * 0.82; t.endY = h * 0.45;
       t.flyProgress = 0;
       sounds.whoosh();
+      haptics.tapFeedback();
     }
-  }, [phase, sounds]);
+  }, [phase, sounds, haptics]);
 
   const handleSwipe = useCallback((direction) => {
-    if (phase !== 'playing') return;
-    if (direction !== 'right') return;
+    if (phase !== 'playing' || direction !== 'right') return;
     const s = state.current;
     const t = s.currentToken;
     if (!t.active || t.flying) return;
-
     t.flying = true;
-    t.startX = t.x;
-    t.startY = t.y;
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    t.endX = w * 0.82;
-    t.endY = h * 0.45;
+    t.startX = t.x; t.startY = t.y;
+    const w = window.innerWidth, h = window.innerHeight;
+    t.endX = w * 0.82; t.endY = h * 0.45;
     t.flyProgress = 0;
     sounds.whoosh();
-  }, [phase, sounds]);
+    haptics.tapFeedback();
+  }, [phase, sounds, haptics]);
 
   useTouch(canvasRef, { onTap: handleTap, onSwipe: handleSwipe, onDrag: handleDrag });
 
-  const drawParrot = useCallback((ctx, x, y, facing, bob, color1, color2) => {
+  const drawParrot = useCallback((ctx, x, y, facing, bob, color1, color2, wingFlap) => {
     ctx.save();
-    ctx.translate(x, y + Math.sin(bob) * 4);
+    ctx.translate(x, y + Math.sin(bob) * 5);
     const dir = facing === 'right' ? 1 : -1;
     ctx.scale(dir, 1);
 
-    // Body
+    // Shadow under parrot
     ctx.beginPath();
-    ctx.ellipse(0, 0, 28, 35, 0, 0, Math.PI * 2);
-    const bodyGrad = ctx.createLinearGradient(-28, -35, 28, 35);
+    ctx.ellipse(0, 50, 25, 6, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fill();
+
+    // Tail feathers
+    ctx.save();
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-12 - i * 4, 25);
+      ctx.quadraticCurveTo(-30 - i * 8, 50 + i * 5, -15 - i * 6, 60 + i * 5);
+      ctx.lineWidth = 4 - i;
+      ctx.strokeStyle = color2;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Body with gradient
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 28, 36, 0, 0, Math.PI * 2);
+    const bodyGrad = ctx.createRadialGradient(-8, -10, 0, 0, 0, 36);
     bodyGrad.addColorStop(0, color1);
-    bodyGrad.addColorStop(1, color2);
+    bodyGrad.addColorStop(0.7, color2);
+    bodyGrad.addColorStop(1, `${color2}CC`);
     ctx.fillStyle = bodyGrad;
     ctx.fill();
 
-    // Head
+    // Chest highlight
     ctx.beginPath();
-    ctx.arc(10, -30, 18, 0, Math.PI * 2);
-    ctx.fillStyle = color1;
+    ctx.ellipse(5, 5, 14, 20, 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.fill();
 
-    // Eye
+    // Wing with flap
+    const wingAngle = -0.3 + Math.sin(wingFlap || 0) * 0.15;
+    ctx.save();
+    ctx.rotate(wingAngle);
     ctx.beginPath();
-    ctx.arc(18, -33, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
+    ctx.ellipse(-10, 5, 20, 28, -0.2, 0, Math.PI * 2);
+    const wingGrad = ctx.createLinearGradient(-30, -20, 10, 30);
+    wingGrad.addColorStop(0, color2);
+    wingGrad.addColorStop(1, color1);
+    ctx.fillStyle = wingGrad;
+    ctx.globalAlpha = 0.8;
     ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Head
     ctx.beginPath();
-    ctx.arc(19, -33, 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#000';
+    ctx.arc(10, -32, 20, 0, Math.PI * 2);
+    const headGrad = ctx.createRadialGradient(6, -36, 0, 10, -32, 20);
+    headGrad.addColorStop(0, color1);
+    headGrad.addColorStop(1, color2);
+    ctx.fillStyle = headGrad;
+    ctx.fill();
+
+    // Eye ring
+    ctx.beginPath();
+    ctx.arc(19, -35, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
+    // Pupil
+    ctx.beginPath();
+    ctx.arc(20, -35, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#111';
+    ctx.fill();
+    // Eye highlight
+    ctx.beginPath();
+    ctx.arc(21.5, -36.5, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFF';
     ctx.fill();
 
     // Beak
     ctx.beginPath();
-    ctx.moveTo(25, -28);
-    ctx.quadraticCurveTo(38, -25, 30, -18);
-    ctx.quadraticCurveTo(25, -20, 25, -28);
-    ctx.fillStyle = '#F5A623';
-    ctx.fill();
-
-    // Wing
-    ctx.beginPath();
-    ctx.ellipse(-8, 5, 18, 25, -0.3, 0, Math.PI * 2);
-    ctx.fillStyle = color2;
-    ctx.globalAlpha = 0.7;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // Tail
-    ctx.beginPath();
-    ctx.moveTo(-15, 25);
-    ctx.lineTo(-35, 50);
-    ctx.lineTo(-20, 48);
-    ctx.lineTo(-30, 60);
-    ctx.lineTo(-10, 45);
-    ctx.lineTo(-5, 30);
-    ctx.closePath();
-    ctx.fillStyle = color2;
+    ctx.moveTo(27, -30);
+    ctx.quadraticCurveTo(42, -27, 33, -20);
+    ctx.quadraticCurveTo(27, -22, 27, -30);
+    const beakGrad = ctx.createLinearGradient(27, -30, 38, -20);
+    beakGrad.addColorStop(0, '#FFD700');
+    beakGrad.addColorStop(1, '#E8A317');
+    ctx.fillStyle = beakGrad;
     ctx.fill();
 
     ctx.restore();
@@ -250,108 +276,137 @@ export default function Game10sur10({ onComplete, onBack }) {
     const w = window.innerWidth;
     const h = window.innerHeight;
     if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
     }
     const ctx = canvas.getContext('2d');
     ctx.save();
     ctx.scale(dpr, dpr);
 
     const s = state.current;
-    const cx = w / 2;
-    const cy = h / 2;
+    const cx = w / 2, cy = h / 2;
 
+    // --- READY SCREEN ---
     if (phase === 'ready') {
+      // Forest gradient bg
       const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
-      bgGrad.addColorStop(0, '#1a2a1a');
-      bgGrad.addColorStop(1, '#0d1a0d');
+      bgGrad.addColorStop(0, '#0d2818');
+      bgGrad.addColorStop(0.5, '#122a15');
+      bgGrad.addColorStop(1, '#0a1f0d');
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, w, h);
 
-      drawParrot(ctx, w * 0.2, cy, 'right', elapsed * 2, '#e74c3c', '#c0392b');
-      drawParrot(ctx, w * 0.8, cy, 'left', elapsed * 2 + 1, '#3498db', '#2980b9');
+      // Floating leaves
+      for (const leaf of s.leaves) {
+        const lx = leaf.x * w + Math.sin(elapsed * leaf.speed * 10 + leaf.phase) * 20;
+        const ly = leaf.y * h;
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.rotate(leaf.rotation + elapsed * 0.5);
+        ctx.fillStyle = `rgba(46,234,163,${0.08 + Math.sin(elapsed + leaf.phase) * 0.04})`;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, leaf.size, leaf.size * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      drawParrot(ctx, w * 0.2, cy, 'right', elapsed * 2, '#e74c3c', '#c0392b', elapsed * 3);
+      drawParrot(ctx, w * 0.8, cy, 'left', elapsed * 2 + 1, '#3498db', '#2980b9', elapsed * 3 + 1);
+
+      // Arrow between parrots
+      const arrowAlpha = 0.3 + Math.sin(elapsed * 3) * 0.2;
+      ctx.globalAlpha = arrowAlpha;
+      ctx.strokeStyle = '#F5A623';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.32, cy);
+      ctx.lineTo(w * 0.68, cy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Arrowhead
+      ctx.beginPath();
+      ctx.moveTo(w * 0.68, cy);
+      ctx.lineTo(w * 0.65, cy - 8);
+      ctx.lineTo(w * 0.65, cy + 8);
+      ctx.closePath();
+      ctx.fillStyle = '#F5A623';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      juice.drawNeonText(ctx, '10 sur 10', cx, cy - 90, '#F5A623', 32);
+
+      ctx.font = '15px -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('10 sur 10', cx, cy - 80);
-      ctx.font = '18px sans-serif';
-      ctx.fillStyle = COLORS.gold;
-      ctx.fillText('Parrots give 10/10 tokens', cx, cy - 40);
-      ctx.fillText('without hesitation!', cx, cy - 16);
-      ctx.font = '16px sans-serif';
-      ctx.fillStyle = COLORS.gray;
-      ctx.fillText('Swipe tokens to your partner', cx, cy + 80);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
-      const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
-      ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 130);
+      ctx.fillStyle = '#8a8';
+      ctx.fillText('Parrots give 10/10 tokens', cx, cy - 50);
+      ctx.fillText('without hesitation!', cx, cy - 30);
+
+      ctx.fillStyle = '#667';
+      ctx.font = '13px -apple-system, sans-serif';
+      ctx.fillText('Swipe tokens → to your partner', cx, cy + 85);
+
+      const tapAlpha = 0.3 + Math.sin(elapsed * 4) * 0.7;
+      ctx.globalAlpha = Math.max(0, tapAlpha);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 130, '#F5A623', 20);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
     }
 
-    // Update time
+    // --- PLAYING ---
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
-
-    // Token animation
     s.tokenAngle += delta * 2;
     s.leftParrotBob = elapsed * 2.5;
     s.rightParrotBob = elapsed * 2.5 + 1;
 
     const t = s.currentToken;
 
-    // Flying token animation
+    // Flying token
     if (t.flying) {
       t.flyProgress += delta * 3.5;
       const p = Math.min(1, t.flyProgress);
       const ease = 1 - Math.pow(1 - p, 3);
       t.x = t.startX + (t.endX - t.startX) * ease;
-      const arcHeight = -80;
+      const arcHeight = -100;
       t.y = t.startY + (t.endY - t.startY) * ease + arcHeight * Math.sin(p * Math.PI);
-
       spawnTrail(t.x, t.y);
 
       if (p >= 1) {
-        // Token delivered
-        t.active = false;
-        t.flying = false;
+        t.active = false; t.flying = false;
         s.tokensGiven++;
-
         const now = performance.now();
         const hesitation = (now - t.spawnTime) / 1000;
 
-        if (hesitation < 0.5) {
-          s.consecutiveSpeed++;
-        } else if (hesitation < 1.0) {
-          s.consecutiveSpeed = Math.max(0, s.consecutiveSpeed - 1);
-        } else {
-          s.consecutiveSpeed = 0;
-        }
+        if (hesitation < 0.5) { s.consecutiveSpeed++; }
+        else if (hesitation < 1.0) { s.consecutiveSpeed = Math.max(0, s.consecutiveSpeed - 1); }
+        else { s.consecutiveSpeed = 0; }
 
         s.multiplier = 1.0 + s.consecutiveSpeed * 0.3;
         const tokenScore = Math.round(1 * s.multiplier * 10) / 10;
         s.score += tokenScore;
 
         if (hesitation < 0.5) {
-          s.feedbackText = `FAST! x${s.multiplier.toFixed(1)}`;
+          s.feedbackText = `FAST! ×${s.multiplier.toFixed(1)}`;
+          spawnParticles(t.endX, t.endY, 18, 46, 234, 163, { maxSpeed: 300, upBias: 40 });
+          s.shockwaves.push({ x: t.endX, y: t.endY, radius: 15, maxRadius: 120, life: 0.4, maxLife: 0.4, color: 'rgba(46,234,163,0.5)' });
+          juice.shake(5, 0.12);
+          juice.flash('#2EEAA3', 0.15);
+          haptics.comboFeedback(s.consecutiveSpeed);
+          sounds.combo(s.consecutiveSpeed);
         } else if (hesitation < 1.0) {
-          s.feedbackText = `OK x${s.multiplier.toFixed(1)}`;
+          s.feedbackText = `OK ×${s.multiplier.toFixed(1)}`;
+          spawnParticles(t.endX, t.endY, 10, 245, 166, 35);
+          haptics.tapFeedback();
+          sounds.pop();
         } else {
           s.feedbackText = 'Too slow...';
+          haptics.failFeedback();
         }
         s.feedbackTimer = 0.8;
+        s.floatingTexts.push({ text: `+${tokenScore.toFixed(1)}`, x: t.endX, y: t.endY - 30, life: 0.8, color: hesitation < 0.5 ? '#2EEAA3' : '#F5A623', size: 22 });
 
-        spawnParticles(t.endX, t.endY, 12, 245, 166, 35);
-        sounds.chime();
-
-        if (s.tokensGiven < TOTAL_TOKENS) {
-          setTimeout(() => resetToken(w, h), 200);
-        }
-
+        if (s.tokensGiven < TOTAL_TOKENS) setTimeout(() => resetToken(w, h), 180);
         setDisplayScore(Math.round(s.score));
       }
     }
@@ -359,174 +414,261 @@ export default function Game10sur10({ onComplete, onBack }) {
     // Update particles
     for (const p of s.particles) {
       if (!p.active) continue;
-      p.x += p.vx * delta;
-      p.y += p.vy * delta;
-      p.vy += 80 * delta;
+      p.x += p.vx * delta; p.y += p.vy * delta;
+      p.vy += 100 * delta;
+      p.vx *= 0.97; p.vy *= 0.97;
       p.life -= delta;
       if (p.life <= 0) p.active = false;
     }
     for (const p of s.trailParticles) {
       if (!p.active) continue;
       p.life -= delta;
-      p.alpha = (p.life / p.maxLife) * 0.5;
+      p.alpha = (p.life / p.maxLife) * 0.6;
       if (p.life <= 0) p.active = false;
     }
-
+    // Shockwaves
+    for (let i = s.shockwaves.length - 1; i >= 0; i--) {
+      const sw = s.shockwaves[i];
+      sw.life -= delta;
+      const prog = 1 - sw.life / sw.maxLife;
+      sw.radius = 15 + (sw.maxRadius - 15) * prog;
+      if (sw.life <= 0) s.shockwaves.splice(i, 1);
+    }
+    // Floating texts
+    for (let i = s.floatingTexts.length - 1; i >= 0; i--) {
+      const ft = s.floatingTexts[i];
+      ft.y -= 50 * delta; ft.life -= delta;
+      if (ft.life <= 0) s.floatingTexts.splice(i, 1);
+    }
     if (s.feedbackTimer > 0) s.feedbackTimer -= delta;
+    juice.update(delta);
 
     // Game over
     if ((s.timeLeft <= 0 || s.tokensGiven >= TOTAL_TOKENS) && phase === 'playing') {
-      setPhase('ended');
-      setDisplayScore(Math.round(s.score));
+      haptics.successFeedback(); sounds.success();
+      setPhase('ended'); setDisplayScore(Math.round(s.score));
       return;
     }
 
     // --- RENDER ---
     const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
-    bgGrad.addColorStop(0, '#1a2a1a');
-    bgGrad.addColorStop(0.5, '#162016');
-    bgGrad.addColorStop(1, '#0d1a0d');
+    bgGrad.addColorStop(0, '#0d2818');
+    bgGrad.addColorStop(0.4, '#122a15');
+    bgGrad.addColorStop(1, '#0a1f0d');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // Branch/perch for left parrot
-    ctx.strokeStyle = '#5a3a1a';
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.moveTo(0, cy + 45);
-    ctx.quadraticCurveTo(w * 0.15, cy + 40, w * 0.3, cy + 50);
-    ctx.stroke();
+    ctx.save();
+    juice.applyShake(ctx);
 
-    // Branch for right parrot
-    ctx.beginPath();
-    ctx.moveTo(w, cy + 45);
-    ctx.quadraticCurveTo(w * 0.85, cy + 40, w * 0.7, cy + 50);
-    ctx.stroke();
-
-    // Left parrot (giver)
-    drawParrot(ctx, w * 0.15, cy, 'right', s.leftParrotBob, '#e74c3c', '#c0392b');
-
-    // Right parrot (receiver)
-    drawParrot(ctx, w * 0.85, cy, 'left', s.rightParrotBob, '#3498db', '#2980b9');
-
-    // Trail particles
-    for (const p of s.trailParticles) {
-      if (!p.active) continue;
+    // Floating leaves (subtle bg)
+    for (const leaf of s.leaves) {
+      const lx = leaf.x * w + Math.sin(elapsed * leaf.speed * 10 + leaf.phase) * 15;
+      const ly = leaf.y * h;
+      ctx.save();
+      ctx.translate(lx, ly);
+      ctx.rotate(leaf.rotation + elapsed * 0.3);
+      ctx.fillStyle = `rgba(46,234,163,0.05)`;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(245,166,35,${p.alpha})`;
+      ctx.ellipse(0, 0, leaf.size, leaf.size * 0.4, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
 
-    // Draw token
+    // Branches
+    ctx.strokeStyle = '#4a3015';
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-5, cy + 48);
+    ctx.quadraticCurveTo(w * 0.15, cy + 42, w * 0.35, cy + 52);
+    ctx.stroke();
+    // Bark texture
+    ctx.strokeStyle = '#3a2510';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.05, cy + 46); ctx.lineTo(w * 0.1, cy + 44);
+    ctx.moveTo(w * 0.18, cy + 43); ctx.lineTo(w * 0.22, cy + 45);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#4a3015';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(w + 5, cy + 48);
+    ctx.quadraticCurveTo(w * 0.85, cy + 42, w * 0.65, cy + 52);
+    ctx.stroke();
+
+    // Parrots
+    drawParrot(ctx, w * 0.15, cy, 'right', s.leftParrotBob, '#e74c3c', '#c0392b', elapsed * 4);
+    drawParrot(ctx, w * 0.85, cy, 'left', s.rightParrotBob, '#3498db', '#2980b9', elapsed * 4 + 1.5);
+
+    // Trail particles with glow
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of s.trailParticles) {
+      if (!p.active) continue;
+      const frac = p.life / p.maxLife;
+      ctx.globalAlpha = p.alpha;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * frac, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 90%, 60%, ${p.alpha})`;
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Shockwaves
+    for (const sw of s.shockwaves) {
+      const alpha = sw.life / sw.maxLife;
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = sw.color.replace(/[\d.]+\)$/, `${alpha * 0.7})`);
+      ctx.lineWidth = 3 * alpha;
+      ctx.stroke();
+    }
+
+    // Token
     if (t.active) {
       ctx.save();
       ctx.translate(t.x, t.y);
-      ctx.rotate(s.tokenAngle);
 
-      // Token glow
-      const glowGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, 30);
-      glowGrad.addColorStop(0, 'rgba(245,166,35,0.3)');
-      glowGrad.addColorStop(1, 'rgba(245,166,35,0)');
-      ctx.fillStyle = glowGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, 30, 0, Math.PI * 2);
-      ctx.fill();
+      // Outer glow
+      juice.drawGlow(ctx, 0, 0, 45, '#F5A623', 0.25);
+
+      ctx.rotate(s.tokenAngle);
 
       // Token body
       ctx.beginPath();
-      ctx.arc(0, 0, 18, 0, Math.PI * 2);
-      const tokenGrad = ctx.createRadialGradient(-5, -5, 0, 0, 0, 18);
-      tokenGrad.addColorStop(0, '#ffe066');
-      tokenGrad.addColorStop(0.6, '#F5A623');
-      tokenGrad.addColorStop(1, '#c47f17');
+      ctx.arc(0, 0, 20, 0, Math.PI * 2);
+      const tokenGrad = ctx.createRadialGradient(-6, -6, 0, 0, 0, 20);
+      tokenGrad.addColorStop(0, '#FFE866');
+      tokenGrad.addColorStop(0.5, '#F5A623');
+      tokenGrad.addColorStop(1, '#B8780F');
       ctx.fillStyle = tokenGrad;
       ctx.fill();
-      ctx.strokeStyle = '#a06a10';
-      ctx.lineWidth = 2;
+
+      // Rim
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, Math.PI * 2);
+      ctx.strokeStyle = '#D4910A';
+      ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      // Token inner design
+      // Inner ring
       ctx.beginPath();
-      ctx.arc(0, 0, 12, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 1;
+      ctx.arc(0, 0, 13, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
       // Number
       ctx.rotate(-s.tokenAngle);
-      ctx.font = 'bold 12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#7a4a00';
+      ctx.font = 'bold 13px -apple-system, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#6B4000';
       ctx.fillText(`${s.tokensGiven + 1}`, 0, 1);
 
       ctx.restore();
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
-      ctx.fill();
+      ctx.globalAlpha = alpha;
+      if (p.type === 'line') {
+        ctx.strokeStyle = `rgb(${p.r},${p.g},${p.b})`;
+        ctx.lineWidth = p.size * alpha * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+        ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+        ctx.fill();
+      }
     }
+    ctx.restore();
 
-    // Token counter
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.gold;
-    const tokenDisplay = `${s.tokensGiven}/${TOTAL_TOKENS}`;
-    ctx.fillText(tokenDisplay, cx, h - 40);
-
-    // Token dots
-    for (let i = 0; i < TOTAL_TOKENS; i++) {
-      const dotX = cx - (TOTAL_TOKENS * 12) / 2 + i * 12 + 6;
-      ctx.beginPath();
-      ctx.arc(dotX, h - 60, 4, 0, Math.PI * 2);
-      ctx.fillStyle = i < s.tokensGiven ? COLORS.gold : 'rgba(255,255,255,0.2)';
-      ctx.fill();
-    }
-
-    // Multiplier
-    if (s.multiplier > 1) {
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.mint;
-      ctx.fillText(`x${s.multiplier.toFixed(1)}`, cx, 80);
+    // Floating texts
+    for (const ft of s.floatingTexts) {
+      const alpha = Math.min(1, ft.life * 2.5);
+      ctx.globalAlpha = alpha;
+      juice.drawNeonText(ctx, ft.text, ft.x, ft.y, ft.color, ft.size);
+      ctx.globalAlpha = 1;
     }
 
     // Feedback text
     if (s.feedbackTimer > 0) {
       const alpha = Math.min(1, s.feedbackTimer * 2);
       ctx.globalAlpha = alpha;
-      ctx.font = 'bold 28px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = s.feedbackText.includes('slow') ? COLORS.red : COLORS.mint;
-      ctx.fillText(s.feedbackText, cx, cy - 80);
+      const fbColor = s.feedbackText.includes('slow') ? '#FF4444' : '#2EEAA3';
+      juice.drawNeonText(ctx, s.feedbackText, cx, cy - 90, fbColor, 26);
       ctx.globalAlpha = 1;
     }
 
-    // Timer bar
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.fillRect(0, 0, w, 4);
-    const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.gold;
-    ctx.fillRect(0, 0, w * timerFrac, 4);
+    // Token counter dots
+    for (let i = 0; i < TOTAL_TOKENS; i++) {
+      const dotX = cx - (TOTAL_TOKENS * 14) / 2 + i * 14 + 7;
+      const dotY = h - 50;
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
+      if (i < s.tokensGiven) {
+        ctx.fillStyle = '#F5A623';
+        ctx.shadowColor = '#F5A623';
+        ctx.shadowBlur = 6;
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.shadowBlur = 0;
+      }
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
 
-    // Timer + score
-    ctx.font = 'bold 24px sans-serif';
+    // Multiplier
+    if (s.multiplier > 1) {
+      juice.drawNeonText(ctx, `×${s.multiplier.toFixed(1)}`, cx, 78, '#2EEAA3', 24);
+    }
+
+    // Flash overlay
+    juice.drawFlash(ctx, w, h);
+
+    ctx.restore(); // end shake
+
+    // Timer bar (outside shake)
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(0, 0, w, 5);
+    const timerFrac = s.timeLeft / GAME_DURATION;
+    const timerGrad = ctx.createLinearGradient(0, 0, w * timerFrac, 0);
+    timerGrad.addColorStop(0, s.timeLeft < 3 ? '#FF4444' : '#F5A623');
+    timerGrad.addColorStop(1, s.timeLeft < 3 ? '#FF8800' : '#FFD700');
+    ctx.fillStyle = timerGrad;
+    ctx.fillRect(0, 0, w * timerFrac, 5);
+
+    // Timer + Score
+    ctx.font = 'bold 20px -apple-system, sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    ctx.fillStyle = s.timeLeft < 3 ? '#FF4444' : '#FFF';
+    ctx.shadowColor = s.timeLeft < 3 ? '#FF4444' : '#F5A623';
+    ctx.shadowBlur = 6;
+    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 16, 34);
+    ctx.shadowBlur = 0;
+
     ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${Math.round(s.score)}`, 20, 40);
+    ctx.fillStyle = '#FFF';
+    ctx.shadowColor = '#F5A623';
+    ctx.shadowBlur = 6;
+    ctx.fillText(`${Math.round(s.score)}`, 16, 34);
+    ctx.shadowBlur = 0;
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.fillStyle = '#667';
+    ctx.fillText('pts', 16 + ctx.measureText(`${Math.round(s.score)}`).width + 4, 34);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, spawnTrail, resetToken, drawParrot]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnTrail, resetToken, drawParrot]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -535,23 +677,15 @@ export default function Game10sur10({ onComplete, onBack }) {
   useEffect(() => {
     if (phase === 'playing') {
       const s = state.current;
-      s.tokensGiven = 0;
-      s.score = 0;
-      s.multiplier = 1;
-      s.consecutiveSpeed = 0;
-      s.timeLeft = GAME_DURATION;
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      resetToken(w, h);
-      gameLoop.reset();
-      gameLoop.start();
+      s.tokensGiven = 0; s.score = 0; s.multiplier = 1;
+      s.consecutiveSpeed = 0; s.timeLeft = GAME_DURATION;
+      s.floatingTexts = []; s.shockwaves = [];
+      resetToken(window.innerWidth, window.innerHeight);
+      gameLoop.reset(); gameLoop.start();
     }
   }, [phase, gameLoop, resetToken]);
 
-  useEffect(() => {
-    if (phase === 'ended') gameLoop.stop();
-  }, [phase, gameLoop]);
-
+  useEffect(() => { if (phase === 'ended') gameLoop.stop(); }, [phase, gameLoop]);
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
   return (
@@ -561,32 +695,32 @@ export default function Game10sur10({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)',
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 12 }}>10 sur 10!</div>
-          <div style={{ color: COLORS.gold, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{displayScore}</div>
-          <div style={{ color: COLORS.gray, fontSize: 16, marginBottom: 4 }}>
-            {state.current.tokensGiven}/{TOTAL_TOKENS} tokens given
-          </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>
-            Parrots share without hesitation!
-          </div>
+          <div style={{ color: '#AAB', fontSize: 16, letterSpacing: 4, marginBottom: 8, textTransform: 'uppercase' }}>10 sur 10</div>
+          <div style={{
+            color: '#F5A623', fontSize: 56, fontWeight: 'bold', marginBottom: 4,
+            textShadow: '0 0 30px rgba(245,166,35,0.5)',
+          }}>{displayScore}</div>
+          <div style={{ color: '#667', fontSize: 14, marginBottom: 4 }}>{state.current.tokensGiven}/{TOTAL_TOKENS} tokens</div>
+          <div style={{ color: '#556', fontSize: 13, marginBottom: 32 }}>Parrots share without hesitation!</div>
           <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.gold, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+            background: 'linear-gradient(135deg, #F5A623, #FFD700)', color: '#0A0F1C', border: 'none',
+            padding: '14px 48px', borderRadius: 14, fontSize: 18, fontWeight: 'bold', cursor: 'pointer',
+            marginBottom: 12, boxShadow: '0 0 20px rgba(245,166,35,0.3)',
           }}>Continue</button>
           <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+            background: 'transparent', color: '#667', border: '1px solid #334',
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
         <button onClick={onBack} style={{
-          position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
-          color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
-          fontSize: 14, cursor: 'pointer', zIndex: 10,
-        }}>Back</button>
+          position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.08)',
+          color: '#AAB', border: 'none', borderRadius: 10, padding: '8px 16px',
+          fontSize: 13, cursor: 'pointer', zIndex: 10, backdropFilter: 'blur(4px)',
+        }}>← Back</button>
       )}
     </div>
   );
