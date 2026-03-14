@@ -2,11 +2,16 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 15;
 const HUMMINGBIRD_BPS = 80;
 const POOL_SIZE = 100;
+const FLOAT_TEXT_POOL = 20;
+const SHOCKWAVE_POOL = 5;
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 export default function GameWingBeat({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -14,6 +19,8 @@ export default function GameWingBeat({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     totalTaps: 0,
@@ -40,7 +47,54 @@ export default function GameWingBeat({ onComplete, onBack }) {
       speed: 10 + Math.random() * 30,
       alpha: 0.1 + Math.random() * 0.15,
     })),
+    // Floating "+1" texts
+    floatTexts: Array(FLOAT_TEXT_POOL).fill(null).map(() => ({
+      active: false, x: 0, y: 0, vy: 0, life: 0, maxLife: 0, text: '', alpha: 1,
+    })),
+    // Shockwave rings for milestones
+    shockwaves: Array(SHOCKWAVE_POOL).fill(null).map(() => ({
+      active: false, x: 0, y: 0, radius: 0, maxRadius: 0, life: 0, maxLife: 0,
+      r: 0, g: 0, b: 0,
+    })),
+    lastMilestone: 0,
   });
+
+  const spawnFloatText = useCallback((x, y, text) => {
+    const s = state.current;
+    for (let i = 0; i < s.floatTexts.length; i++) {
+      const ft = s.floatTexts[i];
+      if (!ft.active) {
+        ft.active = true;
+        ft.x = x + (Math.random() - 0.5) * 30;
+        ft.y = y;
+        ft.vy = -60 - Math.random() * 40;
+        ft.life = 0.8 + Math.random() * 0.4;
+        ft.maxLife = ft.life;
+        ft.text = text;
+        ft.alpha = 1;
+        return;
+      }
+    }
+  }, []);
+
+  const spawnShockwave = useCallback((x, y, color) => {
+    const s = state.current;
+    for (let i = 0; i < s.shockwaves.length; i++) {
+      const sw = s.shockwaves[i];
+      if (!sw.active) {
+        sw.active = true;
+        sw.x = x;
+        sw.y = y;
+        sw.radius = 5;
+        sw.maxRadius = 120;
+        sw.life = 0.6;
+        sw.maxLife = 0.6;
+        const c = color || [46, 234, 163];
+        sw.r = c[0]; sw.g = c[1]; sw.b = c[2];
+        return;
+      }
+    }
+  }, []);
 
   const spawnParticles = useCallback((cx, cy, count) => {
     const s = state.current;
@@ -91,8 +145,32 @@ export default function GameWingBeat({ onComplete, onBack }) {
     const cy = canvas ? canvas.height / (2 * dpr) : 300;
     spawnParticles(cx - 20, cy + s.birdY, 3 + Math.min(8, Math.floor(s.tapsPerSecond / 5)));
 
-    sounds.tick();
-  }, [phase, sounds, spawnParticles]);
+    // Floating "+1" text
+    spawnFloatText(cx + 30 + Math.random() * 20, cy + s.birdY - 20, '+1');
+
+    // Haptic tap feedback
+    haptics.tapFeedback();
+
+    // Screen shake on each tap
+    juice.shake(3, 0.08);
+
+    // Flash green on fast taps
+    if (s.tapsPerSecond >= 6) {
+      juice.flash('#2EEAA3', 0.15);
+    }
+
+    // Sound: wingflap instead of tick
+    sounds.wingflap();
+
+    // Milestone shockwave every 10 taps
+    const currentMilestone = Math.floor(s.totalTaps / 10);
+    if (currentMilestone > s.lastMilestone && s.totalTaps > 0) {
+      s.lastMilestone = currentMilestone;
+      spawnShockwave(cx, cy + s.birdY, [0, 212, 255]);
+      haptics.comboFeedback(currentMilestone);
+      sounds.combo(currentMilestone);
+    }
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnFloatText, spawnShockwave]);
 
   useTouch(canvasRef, { onTap: handleTap });
 
@@ -125,22 +203,21 @@ export default function GameWingBeat({ onComplete, onBack }) {
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Wing Beat Challenge', cx, cy - 60, COLORS.mint, 28);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Wing Beat Challenge', cx, cy - 60);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.cyan;
       ctx.fillText('Hummingbird wings beat', cx, cy - 10);
       ctx.fillText('80 times per second!', cx, cy + 16);
-      ctx.font = '16px sans-serif';
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Tap as fast as you can!', cx, cy + 60);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 110);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, COLORS.cyan, 20);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -188,14 +265,40 @@ export default function GameWingBeat({ onComplete, onBack }) {
       if (p.life <= 0) p.active = false;
     }
 
+    // Update floating texts
+    for (const ft of s.floatTexts) {
+      if (!ft.active) continue;
+      ft.y += ft.vy * delta;
+      ft.life -= delta;
+      ft.alpha = Math.max(0, ft.life / ft.maxLife);
+      if (ft.life <= 0) ft.active = false;
+    }
+
+    // Update shockwaves
+    for (const sw of s.shockwaves) {
+      if (!sw.active) continue;
+      sw.life -= delta;
+      const progress = 1 - sw.life / sw.maxLife;
+      sw.radius = 5 + (sw.maxRadius - 5) * progress;
+      if (sw.life <= 0) sw.active = false;
+    }
+
+    // Update juice (shake, flash decay)
+    juice.update(delta);
+
     // Game over
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
       setDisplayScore(s.totalTaps);
+      sounds.success();
+      haptics.successFeedback();
       return;
     }
 
     // --- RENDER ---
+    // Apply shake transform
+    juice.applyShake(ctx);
+
     // Sky gradient with motion blur
     const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
     const motionBlurIntensity = Math.min(0.3, s.tapsPerSecond / 50);
@@ -222,15 +325,21 @@ export default function GameWingBeat({ onComplete, onBack }) {
       ctx.fill();
     }
 
-    // Flash effect
+    // Flash effect (original)
     if (s.flashAlpha > 0.01) {
       ctx.fillStyle = `rgba(46,234,163,${s.flashAlpha})`;
       ctx.fillRect(0, 0, w, h);
     }
 
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
+
     // Draw hummingbird body
     const bx = cx;
     const by = cy + s.birdY;
+
+    // Body glow (juice)
+    juice.drawGlow(ctx, bx, by, 60 + s.tapsPerSecond * 2, '#2EEAA3', 0.25 + s.tapsPerSecond * 0.01);
 
     // Body
     ctx.save();
@@ -246,10 +355,29 @@ export default function GameWingBeat({ onComplete, onBack }) {
     ctx.fillStyle = bodyGrad;
     ctx.fill();
 
+    // Specular highlight on body
+    ctx.beginPath();
+    ctx.ellipse(-5, -8, 14, 6, -0.3, 0, Math.PI * 2);
+    const specGrad = ctx.createRadialGradient(-5, -8, 0, -5, -8, 14);
+    specGrad.addColorStop(0, 'rgba(255,255,255,0.45)');
+    specGrad.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+    specGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = specGrad;
+    ctx.fill();
+
     // Head
     ctx.beginPath();
     ctx.arc(28, -5, 10, 0, Math.PI * 2);
     ctx.fillStyle = '#2EEAA3';
+    ctx.fill();
+
+    // Specular highlight on head
+    ctx.beginPath();
+    ctx.arc(26, -8, 5, 0, Math.PI * 2);
+    const headSpecGrad = ctx.createRadialGradient(26, -8, 0, 26, -8, 5);
+    headSpecGrad.addColorStop(0, 'rgba(255,255,255,0.5)');
+    headSpecGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = headSpecGrad;
     ctx.fill();
 
     // Eye
@@ -325,7 +453,9 @@ export default function GameWingBeat({ onComplete, onBack }) {
 
     ctx.restore();
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -343,18 +473,60 @@ export default function GameWingBeat({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
 
-    // Giant taps/second counter
-    ctx.font = 'bold 72px sans-serif';
+    // Shockwave rings
+    for (const sw of s.shockwaves) {
+      if (!sw.active) continue;
+      const alpha = sw.life / sw.maxLife;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${sw.r},${sw.g},${sw.b},${alpha * 0.7})`;
+      ctx.lineWidth = 3 * alpha;
+      ctx.stroke();
+      // Inner ring
+      ctx.beginPath();
+      ctx.arc(sw.x, sw.y, sw.radius * 0.7, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.3})`;
+      ctx.lineWidth = 1.5 * alpha;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Floating "+1" texts
+    for (const ft of s.floatTexts) {
+      if (!ft.active) continue;
+      ctx.save();
+      ctx.globalAlpha = ft.alpha;
+      ctx.font = `bold 18px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = COLORS.mint;
+      ctx.shadowColor = '#2EEAA3';
+      ctx.shadowBlur = 8;
+      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // Giant taps/second counter with neon text
+    juice.drawNeonText(ctx, `${s.tapsPerSecond}`, cx, h * 0.2, COLORS.cyan, 72);
+    ctx.font = `20px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.white;
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 10;
-    ctx.fillText(`${s.tapsPerSecond}`, cx, h * 0.2);
-    ctx.shadowBlur = 0;
-    ctx.font = '20px sans-serif';
     ctx.fillStyle = COLORS.cyan;
-    ctx.fillText('taps/second', cx, h * 0.2 + 30);
+    ctx.fillText('taps/second', cx, h * 0.2 + 40);
+
+    // Milestone text (neon) when hitting multiples of 10
+    if (s.totalTaps > 0 && s.totalTaps % 10 === 0) {
+      const mAlpha = Math.max(0, 1 - ((now - s.lastTapTime) / 1000));
+      if (mAlpha > 0.05) {
+        ctx.save();
+        ctx.globalAlpha = mAlpha;
+        juice.drawNeonText(ctx, `${s.totalTaps} taps!`, cx, h * 0.32, COLORS.gold, 24);
+        ctx.restore();
+      }
+    }
 
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
@@ -364,13 +536,13 @@ export default function GameWingBeat({ onComplete, onBack }) {
     ctx.fillRect(0, 0, w * timerFrac, 4);
 
     // Timer text
-    ctx.font = 'bold 24px sans-serif';
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
     ctx.textAlign = 'right';
     ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.white;
     ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
 
     // Total taps
-    ctx.font = '16px sans-serif';
+    ctx.font = `16px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.white;
     ctx.fillText(`Total: ${s.totalTaps}`, 20, 40);
@@ -390,7 +562,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
     // Hummingbird marker
     ctx.fillStyle = COLORS.gold;
     ctx.fillRect(barX + barW - 3, barY - 4, 3, barH + 8);
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'right';
     ctx.fillStyle = COLORS.gold;
     ctx.fillText(`${HUMMINGBIRD_BPS}/s`, barX + barW, barY - 8);
@@ -399,7 +571,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
     ctx.fillText(`You: ${s.tapsPerSecond}/s`, barX, barY - 8);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+  }, [phase, sounds, haptics, juice, spawnParticles]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -416,6 +588,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
       s.peakTps = 0;
       s.birdY = 0;
       s.birdVy = 0;
+      s.lastMilestone = 0;
       gameLoop.reset();
       gameLoop.start();
     }
@@ -436,29 +609,73 @@ export default function GameWingBeat({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(10,15,28,0.7)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>Results</div>
-          <div style={{ color: COLORS.mint, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
+            textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}40`,
+            fontFamily: FONT_FAMILY,
+          }}>Results</div>
+          <div style={{
+            color: COLORS.mint, fontSize: 20, marginBottom: 8,
+            textShadow: `0 0 12px ${COLORS.mint}80`,
+            fontFamily: FONT_FAMILY,
+          }}>
             You: {avgTps} taps/s
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.gold, fontSize: 20, marginBottom: 8,
+            textShadow: `0 0 12px ${COLORS.gold}80`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Hummingbird: {HUMMINGBIRD_BPS} taps/s
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 16, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.cyan, fontSize: 16, marginBottom: 4,
+            textShadow: `0 0 10px ${COLORS.cyan}60`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Peak: {state.current.peakTps} taps/s
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4,
+            textShadow: `0 0 30px ${COLORS.mint}, 0 0 60px ${COLORS.mint}40`,
+            fontFamily: FONT_FAMILY,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>total taps</div>
+          <div style={{
+            color: COLORS.gray, fontSize: 14, marginBottom: 24,
+            fontFamily: FONT_FAMILY,
+          }}>total taps</div>
           <button onClick={() => onComplete(state.current.totalTaps)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+            background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+            color: COLORS.primary,
+            border: 'none',
+            padding: '14px 40px',
+            borderRadius: 12,
+            fontSize: 18,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 4px 20px ${COLORS.cyan}40`,
+            textShadow: 'none',
           }}>Continue</button>
           <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            background: 'rgba(255,255,255,0.08)',
+            color: COLORS.gray,
+            border: `1px solid rgba(255,255,255,0.15)`,
+            padding: '10px 30px',
+            borderRadius: 12,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
           }}>Back</button>
         </div>
       )}
@@ -467,6 +684,9 @@ export default function GameWingBeat({ onComplete, onBack }) {
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>
