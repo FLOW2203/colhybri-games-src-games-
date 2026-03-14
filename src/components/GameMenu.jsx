@@ -31,7 +31,7 @@ export default function GameMenu({ onSelectGame, points, streak }) {
 
   const getHighScore = (id) => {
     try {
-      return JSON.parse(localStorage.getItem(`colhybri_hs_${id}`)) || 0;
+      return JSON.parse(localStorage.getItem(`colhybri_hs_${String(id).padStart(2, '0')}`)) || 0;
     } catch { return 0; }
   };
 
@@ -98,7 +98,7 @@ export default function GameMenu({ onSelectGame, points, streak }) {
           </p>
           <p className="text-2xl mb-1 relative">{gameOfTheDay.emoji}</p>
           <p className="text-lg font-bold text-white relative">
-            {t(GAME_NAMES[gameOfTheDay.id])}
+            {t(GAME_NAMES[String(gameOfTheDay.id).padStart(2, '0')])}
           </p>
           <div className="flex gap-2 mt-2 relative">
             <span className="text-[10px] px-2 py-0.5 bg-white/10 rounded-full text-gray-300">
@@ -143,7 +143,7 @@ export default function GameMenu({ onSelectGame, points, streak }) {
                     </span>
                   </div>
                   <p className="text-sm font-semibold text-white mb-1 leading-tight">
-                    {t(GAME_NAMES[game.id])}
+                    {t(GAME_NAMES[String(game.id).padStart(2, '0')])}
                   </p>
                   <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
                     <span>{game.genre}</span>

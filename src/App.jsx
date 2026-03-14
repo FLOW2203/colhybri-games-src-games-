@@ -10,6 +10,9 @@ import { SCIENCE_FACTS } from './data/scienceFacts';
 import { LEGENDS, GAME_NAMES, UI_STRINGS } from './i18n/index';
 import { LESSONS } from './data/gameConfig';
 
+// Convert numeric game ID (1-26) to zero-padded string key ('01'-'26')
+const toKey = (id) => String(id).padStart(2, '0');
+
 const gameComponents = {
   '01': lazy(() => import('./games/GameHeartbeatRush')),
   '02': lazy(() => import('./games/GameTorpeur')),
@@ -83,7 +86,7 @@ export default function App() {
   }, []);
 
   const handleGameComplete = useCallback((score) => {
-    const hsKey = `colhybri_hs_${currentGameId}`;
+    const hsKey = `colhybri_hs_${toKey(currentGameId)}`;
     const prevHs = JSON.parse(localStorage.getItem(hsKey) || '0');
     const newRecord = score > prevHs;
     if (newRecord) {
@@ -110,8 +113,9 @@ export default function App() {
   }, []);
 
   const currentGame = currentGameId ? GAMES.find(g => g.id === currentGameId) : null;
-  const currentFact = currentGameId ? SCIENCE_FACTS.find(f => f.gameId === currentGameId) : null;
-  const GameComponent = currentGameId ? gameComponents[currentGameId] : null;
+  const gameKey = currentGameId ? toKey(currentGameId) : null;
+  const currentFact = gameKey ? SCIENCE_FACTS.find(f => f.gameId === gameKey) : null;
+  const GameComponent = gameKey ? gameComponents[gameKey] : null;
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-primary">
@@ -177,10 +181,10 @@ export default function App() {
               highScore={lastHighScore}
               isNewRecord={isNewRecord}
               points={currentGame ? currentGame.pointsBase : 10}
-              lesson={currentGameId && LESSONS[currentGameId] ? t(LESSONS[currentGameId]) : ''}
+              lesson={gameKey && LESSONS[gameKey] ? t(LESSONS[gameKey]) : ''}
               fact={currentFact ? t(currentFact.fact) : ''}
               factSource={currentFact ? currentFact.source : ''}
-              gameName={currentGameId && GAME_NAMES[currentGameId] ? t(GAME_NAMES[currentGameId]) : ''}
+              gameName={gameKey && GAME_NAMES[gameKey] ? t(GAME_NAMES[gameKey]) : ''}
               onReplay={handleReplay}
               onChallenge={() => {}}
               onMenu={handleBack}
