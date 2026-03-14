@@ -2,6 +2,8 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 15;
@@ -13,6 +15,8 @@ const BASE_FALL_SPEED = 150;
 const SPEED_INCREASE_INTERVAL = 5;
 const SPAWN_INTERVAL_BASE = 0.6;
 const MILESTONES = [BODY_WEIGHT * 100, BODY_WEIGHT * 200, BODY_WEIGHT * 300];
+
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 const FOOD_TYPES = [
   { type: 'insect', weight: 1, color: '#8B6914', size: 12, emoji: null },
@@ -26,6 +30,8 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     weight: 0,
@@ -82,7 +88,11 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        sounds.countdown(true);
+        haptics.tapFeedback();
+      }
       return;
     }
     const s = state.current;
@@ -117,6 +127,16 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
       const particleColors = [[item.r, item.g, item.b], [255, 255, 255], [46, 234, 163]];
       spawnParticles(item.x, item.y, 5 + s.comboCount, particleColors);
 
+      // Haptic + sound for catch
+      haptics.tapFeedback();
+      sounds.pop();
+
+      // Combo sound and haptic
+      if (s.comboCount > 2) {
+        sounds.combo(s.comboCount);
+        haptics.comboFeedback(Math.min(s.comboCount, 5));
+      }
+
       // Check milestones
       for (let m = 0; m < MILESTONES.length; m++) {
         if (!s.milestoneHit[m] && s.weight >= MILESTONES[m]) {
@@ -129,11 +149,20 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
           const ch = canvas ? canvas.height / dpr : 700;
           spawnParticles(cw / 2, ch / 2, 25, [[245, 166, 35], [255, 215, 0], [255, 255, 255]]);
           sounds.chime();
+          sounds.powerup();
+          haptics.successFeedback();
+          juice.shake(10, 0.35);
+          juice.flash('#F5A623', 0.5);
         }
       }
-      sounds.tick();
+      if (s.comboCount <= 2) {
+        sounds.tick();
+      }
+    } else {
+      // Tapped but missed all items
+      haptics.tapFeedback();
     }
-  }, [phase, sounds, spawnParticles]);
+  }, [phase, sounds, spawnParticles, haptics, juice]);
 
   useTouch(canvasRef, { onTap: handleTap });
 
@@ -156,6 +185,9 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
     const s = state.current;
     const cx = w / 2;
 
+    // Update juice system
+    juice.update(delta);
+
     if (phase === 'ready') {
       const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
       skyGrad.addColorStop(0, '#1a0a2e');
@@ -164,23 +196,30 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, '300 Cheeseburgers', cx, h / 2 - 60, '#2EEAA3', 28);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('300 Cheeseburgers', cx, h / 2 - 60);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.gold;
+      ctx.shadowColor = COLORS.gold;
+      ctx.shadowBlur = 8;
       ctx.fillText('Hummingbirds eat 300x', cx, h / 2 - 10);
       ctx.fillText('their body weight daily!', cx, h / 2 + 16);
-      ctx.font = '16px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('TAP falling food to eat it', cx, h / 2 + 56);
       ctx.fillText(`Goal: ${GOAL_WEIGHT}g`, cx, h / 2 + 78);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing glow behind TAP TO START
+      const pulseAlpha = 0.2 + Math.sin(elapsed * 4) * 0.15;
+      juice.drawGlow(ctx, cx, h / 2 + 130, 80, '#2EEAA3', pulseAlpha);
+
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, h / 2 + 130);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, h / 2 + 130, '#FFFFFF', 20);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -195,6 +234,12 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
     const speedTier = Math.floor(elapsed / SPEED_INCREASE_INTERVAL);
     s.speedMultiplier = 1 + speedTier * 0.4;
     s.spawnInterval = Math.max(0.25, SPAWN_INTERVAL_BASE - speedTier * 0.1);
+
+    // Warning haptic when time is low
+    if (s.timeLeft <= 3 && s.timeLeft > 0 && Math.floor(s.timeLeft + delta) !== Math.floor(s.timeLeft)) {
+      haptics.warningFeedback();
+      sounds.countdown(false);
+    }
 
     // Spawn food items
     if (elapsed - s.lastSpawnTime > s.spawnInterval) {
@@ -231,6 +276,11 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
         s.weight = Math.max(0, s.weight - MISS_PENALTY);
         s.flashAlpha = 0.15;
         s.flashColor = [239, 68, 68];
+        // Miss feedback
+        juice.shake(4, 0.15);
+        juice.flash('#EF4444', 0.2);
+        haptics.impactFeedback();
+        sounds.impact();
       }
     }
 
@@ -249,12 +299,25 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
 
     // Game over check
     if (s.timeLeft <= 0 && phase === 'playing') {
+      const finalWeight = Math.floor(s.weight);
       setPhase('ended');
-      setDisplayScore(Math.floor(s.weight));
+      setDisplayScore(finalWeight);
+      if (finalWeight >= GOAL_WEIGHT) {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#2EEAA3', 0.4);
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#EF4444', 0.3);
+      }
       return;
     }
 
     // --- RENDER ---
+    // Apply screen shake
+    juice.applyShake(ctx);
+
     const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
     skyGrad.addColorStop(0, '#1a0a2e');
     skyGrad.addColorStop(0.5, '#2d1b4e');
@@ -274,15 +337,23 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
       ctx.fill();
     }
 
-    // Flash effect
+    // Flash effect (original)
     if (s.flashAlpha > 0.01) {
       ctx.fillStyle = `rgba(${s.flashColor[0]},${s.flashColor[1]},${s.flashColor[2]},${s.flashAlpha})`;
       ctx.fillRect(0, 0, w, h);
     }
 
-    // Draw food items
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
+
+    // Draw food items with glow
     for (const item of s.items) {
       if (!item.active) continue;
+
+      // Glow behind food items
+      const glowColor = `rgb(${item.r},${item.g},${item.b})`;
+      juice.drawGlow(ctx, item.x, item.y, item.size * 2.5, glowColor, 0.25);
+
       ctx.save();
       ctx.translate(item.x, item.y);
       ctx.rotate(item.rotation);
@@ -301,7 +372,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
         ctx.fill();
         // Label
         ctx.fillStyle = COLORS.white;
-        ctx.font = '9px sans-serif';
+        ctx.font = `9px ${FONT_FAMILY}`;
         ctx.textAlign = 'center';
         ctx.fillText('1g', 0, item.size + 10);
       } else if (item.type === 1) {
@@ -318,7 +389,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.fill();
         ctx.fillStyle = COLORS.white;
-        ctx.font = '9px sans-serif';
+        ctx.font = `9px ${FONT_FAMILY}`;
         ctx.textAlign = 'center';
         ctx.fillText('2g', 0, item.size + 10);
       } else {
@@ -339,7 +410,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
         ctx.fillStyle = '#FFD700';
         ctx.fill();
         ctx.fillStyle = COLORS.white;
-        ctx.font = '9px sans-serif';
+        ctx.font = `9px ${FONT_FAMILY}`;
         ctx.textAlign = 'center';
         ctx.fillText('5g', 0, item.size + 10);
       }
@@ -349,6 +420,9 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
     // Draw hummingbird at bottom center
     const birdX = cx;
     const birdY = h - 80 + Math.sin(s.birdBobPhase) * 5;
+
+    // Glow around the bird
+    juice.drawGlow(ctx, birdX, birdY, 50, '#2EEAA3', 0.2);
 
     ctx.save();
     ctx.translate(birdX, birdY);
@@ -415,7 +489,9 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
 
     ctx.restore();
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -433,33 +509,36 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
 
     // --- HUD ---
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 3 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
 
-    // Timer text
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Glow on timer bar edge
+    if (timerFrac > 0.01) {
+      juice.drawGlow(ctx, w * timerFrac, 2, 12, timerColor, 0.5);
+    }
 
-    // Weight counter
-    ctx.font = 'bold 40px sans-serif';
+    // Timer text - neon
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, s.timeLeft < 3 ? '#EF4444' : '#FFFFFF', 24);
+
+    // Weight counter - neon
+    juice.drawNeonText(ctx, `${Math.floor(s.weight)}g`, cx, 50, '#FFFFFF', 40);
+
+    ctx.font = `14px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.white;
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 8;
-    ctx.fillText(`${Math.floor(s.weight)}g`, cx, 50);
-    ctx.shadowBlur = 0;
-    ctx.font = '14px sans-serif';
     ctx.fillStyle = COLORS.gold;
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = 6;
     const multiplier = Math.floor(s.weight / BODY_WEIGHT);
     ctx.fillText(`${multiplier}x body weight`, cx, 70);
+    ctx.shadowBlur = 0;
 
     // Progress bar (0 -> 900g)
     const barX = 30;
@@ -476,44 +555,50 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
     ctx.fillStyle = progGrad;
     ctx.fillRect(barX, barY, barW * progressFrac, barH);
 
+    // Glow at progress bar leading edge
+    if (progressFrac > 0.01) {
+      juice.drawGlow(ctx, barX + barW * progressFrac, barY + barH / 2, 16, COLORS.gold, 0.4);
+    }
+
     // Milestone markers
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = `bold 10px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     for (let m = 0; m < MILESTONES.length; m++) {
       const mx = barX + (MILESTONES[m] / GOAL_WEIGHT) * barW;
       ctx.fillStyle = s.milestoneHit[m] ? COLORS.gold : 'rgba(255,255,255,0.4)';
       ctx.fillRect(mx - 1, barY - 4, 2, barH + 8);
+      if (s.milestoneHit[m]) {
+        ctx.shadowColor = COLORS.gold;
+        ctx.shadowBlur = 8;
+      }
       ctx.fillText(`${(m + 1) * 100}x`, mx, barY - 8);
+      ctx.shadowBlur = 0;
     }
 
     // Goal label
-    ctx.font = '10px sans-serif';
+    ctx.font = `10px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.gray;
     ctx.fillText('0g', barX, barY - 4);
     ctx.textAlign = 'right';
     ctx.fillText(`${GOAL_WEIGHT}g`, barX + barW, barY - 4);
 
-    // Speed indicator
+    // Speed indicator - neon
     if (s.speedMultiplier > 1) {
-      ctx.font = 'bold 14px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = COLORS.fire;
-      ctx.fillText(`SPEED x${s.speedMultiplier.toFixed(1)}`, 20, 40);
+      juice.drawNeonText(ctx, `SPEED x${s.speedMultiplier.toFixed(1)}`, 80, 40, '#FF6B35', 14);
     }
 
-    // Combo indicator
+    // Combo indicator - neon with glow
     if (s.comboCount > 2) {
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.gold;
-      ctx.globalAlpha = 0.5 + Math.sin(elapsed * 8) * 0.5;
-      ctx.fillText(`COMBO x${s.comboCount}`, cx, 95);
+      const comboAlpha = 0.5 + Math.sin(elapsed * 8) * 0.5;
+      juice.drawGlow(ctx, cx, 95, 40, COLORS.gold, comboAlpha * 0.3);
+      ctx.globalAlpha = comboAlpha;
+      juice.drawNeonText(ctx, `COMBO x${s.comboCount}`, cx, 95, COLORS.gold, 18);
       ctx.globalAlpha = 1;
     }
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+  }, [phase, sounds, spawnParticles, haptics, juice]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -554,36 +639,68 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>Results</div>
-          <div style={{ color: reachedGoal ? COLORS.gold : COLORS.mint, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
+            textShadow: '0 0 20px rgba(255,255,255,0.5), 0 0 40px rgba(255,255,255,0.2)',
+          }}>Results</div>
+          <div style={{
+            color: reachedGoal ? COLORS.gold : COLORS.mint, fontSize: 20, marginBottom: 8,
+            textShadow: reachedGoal
+              ? '0 0 15px rgba(245,166,35,0.7), 0 0 30px rgba(245,166,35,0.3)'
+              : '0 0 15px rgba(46,234,163,0.7), 0 0 30px rgba(46,234,163,0.3)',
+          }}>
             {reachedGoal ? 'Goal reached!' : `${Math.floor(displayScore / BODY_WEIGHT)}x body weight`}
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4,
+            textShadow: '0 0 20px rgba(255,255,255,0.6), 0 0 40px rgba(46,234,163,0.4)',
+          }}>
             {displayScore}g
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 4 }}>
+          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 4, fontFamily: FONT_FAMILY }}>
             / {GOAL_WEIGHT}g
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 16, marginBottom: 24 }}>
+          <div style={{
+            color: COLORS.cyan, fontSize: 16, marginBottom: 24,
+            textShadow: '0 0 10px rgba(0,188,212,0.5)',
+            fontFamily: FONT_FAMILY,
+          }}>
             {Math.floor(displayScore / BODY_WEIGHT)}x / 300x
           </div>
-          <button onClick={() => onComplete(displayScore)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
+          <button onClick={() => { sounds.pop(); haptics.tapFeedback(); onComplete(displayScore); }} style={{
+            background: 'linear-gradient(135deg, #2EEAA3 0%, #00BCD4 100%)',
+            color: COLORS.primary, border: 'none',
             padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: '0 0 20px rgba(46,234,163,0.4), 0 0 40px rgba(46,234,163,0.15)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+            transition: 'transform 0.15s ease, box-shadow 0.15s ease',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+          <button onClick={() => { sounds.tick(); haptics.tapFeedback(); onBack(); }} style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%)',
+            color: COLORS.gray, border: `1px solid rgba(255,255,255,0.15)`,
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            textShadow: '0 0 8px rgba(255,255,255,0.2)',
+            transition: 'transform 0.15s ease, border-color 0.15s ease',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => { haptics.tapFeedback(); onBack(); }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>

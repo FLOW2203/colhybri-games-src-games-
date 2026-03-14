@@ -2,8 +2,11 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 const GAME_DURATION = 40;
 const POOL_SIZE = 120;
 const NUM_DEFENDERS = 5;
@@ -17,6 +20,8 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
   const [displayTime, setDisplayTime] = useState(GAME_DURATION);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     score: 0,
@@ -43,6 +48,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     treeGrowTimer: 0,
     coreGlow: 0,
     damageFlash: 0,
+    lastWarningTime: -1,
   });
 
   const spawnParticles = useCallback((cx, cy, count, r, g, b) => {
@@ -67,7 +73,12 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
   }, []);
 
   const handleTap = useCallback(({ x, y }) => {
-    if (phase === 'ready') { setPhase('playing'); return; }
+    if (phase === 'ready') {
+      setPhase('playing');
+      haptics.tapFeedback();
+      sounds.countdown(true);
+      return;
+    }
     if (phase !== 'playing') return;
     const s = state.current;
 
@@ -104,7 +115,8 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     def.targetX = s.flames[nearestFlame].x;
     def.targetY = s.flames[nearestFlame].y;
     sounds.whoosh();
-  }, [phase, sounds]);
+    haptics.tapFeedback();
+  }, [phase, sounds, haptics]);
 
   useTouch(canvasRef, { onTap: handleTap });
 
@@ -209,23 +221,34 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     const cy = h / 2;
     const orbitR = Math.min(w, h) * ORBIT_RADIUS_RATIO;
 
+    // Update juice effects every frame
+    juice.update(delta);
+
     if (phase === 'ready') {
       ctx.fillStyle = '#0A0F1C';
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+
+      // Neon title
+      juice.drawNeonText(ctx, 'Bouclier de Heigig', w / 2, h / 2 - 70, '#22C55E', 26);
+
+      // Glow behind title
+      juice.drawGlow(ctx, w / 2, h / 2 - 70, 120, '#22C55E', 0.15);
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Bouclier de Heigig', w / 2, h / 2 - 70);
-      ctx.font = '16px sans-serif';
       ctx.fillStyle = COLORS.mint;
       ctx.fillText('The World-Tree Heigig links', w / 2, h / 2 - 20);
       ctx.fillText('sky and earth. Defend it!', w / 2, h / 2 + 4);
-      ctx.font = '14px sans-serif';
+      ctx.font = `14px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('TAP near flames to send defenders', w / 2, h / 2 + 50);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillText('TAP TO START', w / 2, h / 2 + 110);
+
+      // Pulsing "TAP TO START" with neon
+      const pulse = 0.7 + 0.3 * Math.sin(elapsed * 3);
+      ctx.globalAlpha = pulse;
+      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 110, '#FFFFFF', 20);
+      ctx.globalAlpha = 1;
+
       ctx.restore();
       return;
     }
@@ -233,6 +256,16 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     // Update time
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     setDisplayTime(Math.ceil(s.timeLeft));
+
+    // Low time warning haptic
+    if (s.timeLeft < 5 && s.timeLeft > 0) {
+      const sec = Math.ceil(s.timeLeft);
+      if (sec !== s.lastWarningTime) {
+        s.lastWarningTime = sec;
+        haptics.warningFeedback();
+        sounds.tick();
+      }
+    }
 
     // Spawn flames
     s.flameSpawnTimer += delta;
@@ -266,8 +299,16 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
         s.hp--;
         s.damageFlash = 1;
         sounds.firecrackle();
+        sounds.impact();
+        haptics.heavyFeedback();
+        juice.shake(12, 0.4);
+        juice.flash('#FF0000', 0.5);
         spawnParticles(cx, cy, 12, 255, 80, 0);
         if (s.hp <= 0) {
+          sounds.fail();
+          haptics.failFeedback();
+          juice.shake(20, 0.6);
+          juice.flash('#FF0000', 0.7);
           setPhase('ended');
           return;
         }
@@ -300,6 +341,10 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
           setDisplayScore(s.score);
           spawnParticles(d.x, d.y, 15, 34, 197, 94);
           sounds.splash();
+          sounds.pop();
+          haptics.impactFeedback();
+          juice.shake(4, 0.15);
+          juice.flash('#22C55E', 0.2);
 
           // Add bud to tree
           const budAngle = Math.random() * Math.PI * 2;
@@ -336,6 +381,8 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     if (s.treeGrowTimer > 8 && s.treeDepth < 9) {
       s.treeGrowTimer = 0;
       s.treeDepth++;
+      sounds.chime();
+      haptics.comboFeedback(2);
     }
 
     // Damage flash decay
@@ -352,6 +399,15 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
 
     // Game over by time
     if (s.timeLeft <= 0 && phase === 'playing') {
+      if (s.hp > 0) {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#22C55E', 0.4);
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#FF0000', 0.5);
+      }
       setPhase('ended');
       return;
     }
@@ -364,6 +420,10 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     skyGrad.addColorStop(1, '#0D1B0E');
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, w, h);
+
+    // Apply shake transform
+    ctx.save();
+    juice.applyShake(ctx);
 
     // Damage flash overlay
     if (s.damageFlash > 0.01) {
@@ -380,8 +440,10 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     ctx.fillStyle = '#5C3D1E';
     ctx.fillRect(cx - 6, treeBaseY, 12, 30);
 
-    // Glowing core
+    // Glowing core with juice glow
     s.coreGlow = 0.5 + 0.5 * Math.sin(elapsed * 2);
+    juice.drawGlow(ctx, cx, cy, 40, '#22C55E', 0.2 + s.coreGlow * 0.2);
+
     const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 25);
     coreGrad.addColorStop(0, `rgba(100,255,100,${0.3 + s.coreGlow * 0.3})`);
     coreGrad.addColorStop(1, 'rgba(0,100,0,0)');
@@ -394,6 +456,10 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     for (let i = 0; i < TREE_HP; i++) {
       const hx = cx - 25 + i * 25;
       const hy = cy + 90;
+      // Glow behind active hearts
+      if (i < s.hp) {
+        juice.drawGlow(ctx, hx, hy, 15, '#22C55E', 0.3);
+      }
       ctx.save();
       ctx.translate(hx, hy);
       ctx.scale(0.8, 0.8);
@@ -408,9 +474,10 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
       ctx.restore();
     }
 
-    // Draw flames
+    // Draw flames with glow
     for (const f of s.flames) {
       if (!f.alive) continue;
+      juice.drawGlow(ctx, f.x, f.y, f.size * 3, '#FF6600', 0.25);
       drawFlame(ctx, f.x, f.y, f.size, elapsed);
     }
 
@@ -421,12 +488,16 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Draw defenders
+    // Draw defenders with glow
     for (let i = 0; i < s.defenders.length; i++) {
-      drawBird(ctx, s.defenders[i].x, s.defenders[i].y, defenderColors[i]);
+      const d = s.defenders[i];
+      juice.drawGlow(ctx, d.x, d.y, 18, defenderColors[i], d.state === 'attacking' ? 0.5 : 0.2);
+      drawBird(ctx, d.x, d.y, defenderColors[i]);
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -435,21 +506,23 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
-    // Score
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 20, 40);
+    // Restore from shake transform
+    ctx.restore();
 
-    // Timer
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Draw juice flash overlay (after shake restore so it covers full screen)
+    juice.drawFlash(ctx, w, h);
+
+    // Score with neon text
+    juice.drawNeonText(ctx, `Score: ${s.score}`, 80, 40, '#22C55E', 22);
+
+    // Timer with neon text
+    const timerColor = s.timeLeft < 5 ? '#FF4444' : '#FFFFFF';
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, timerColor, 24);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+  }, [phase, sounds, haptics, juice, spawnParticles]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -460,7 +533,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
       const s = state.current;
       s.score = 0; s.hp = TREE_HP; s.treeDepth = 5; s.treeBuds = [];
       s.flames = []; s.flameSpawnTimer = 0; s.treeGrowTimer = 0;
-      s.damageFlash = 0;
+      s.damageFlash = 0; s.lastWarningTime = -1;
       for (let i = 0; i < s.defenders.length; i++) {
         s.defenders[i].state = 'orbiting';
         s.defenders[i].angle = (i / NUM_DEFENDERS) * Math.PI * 2;
@@ -473,6 +546,8 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
   useEffect(() => { if (phase === 'ended') gameLoop.stop(); }, [phase, gameLoop]);
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
+  const isVictory = state.current.hp > 0;
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
@@ -480,30 +555,82 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 30, fontWeight: 'bold', marginBottom: 8 }}>
-            {state.current.hp > 0 ? 'Tree Defended!' : 'Tree Fell...'}
+          <div style={{
+            color: isVictory ? '#22C55E' : '#FF4444',
+            fontSize: 30,
+            fontWeight: 'bold',
+            marginBottom: 8,
+            textShadow: isVictory
+              ? '0 0 20px rgba(34,197,94,0.8), 0 0 40px rgba(34,197,94,0.4)'
+              : '0 0 20px rgba(255,68,68,0.8), 0 0 40px rgba(255,68,68,0.4)',
+            fontFamily: FONT_FAMILY,
+          }}>
+            {isVictory ? 'Tree Defended!' : 'Tree Fell...'}
           </div>
-          <div style={{ color: COLORS.mint, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{state.current.score}</div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>
+          <div style={{
+            color: COLORS.mint,
+            fontSize: 48,
+            fontWeight: 'bold',
+            marginBottom: 8,
+            textShadow: '0 0 20px rgba(34,197,94,0.6), 0 0 40px rgba(34,197,94,0.3)',
+            fontFamily: FONT_FAMILY,
+          }}>{state.current.score}</div>
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 14,
+            marginBottom: 24,
+            fontFamily: FONT_FAMILY,
+          }}>
             Heigig: sacred link between sky and earth
           </div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.mint, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <button onClick={() => {
+            haptics.tapFeedback();
+            sounds.pop();
+            onComplete(state.current.score);
+          }} style={{
+            background: 'linear-gradient(135deg, #22C55E, #16A34A)',
+            color: '#FFFFFF',
+            border: 'none',
+            padding: '14px 40px',
+            borderRadius: 12,
+            fontSize: 18,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginBottom: 12,
+            boxShadow: '0 0 20px rgba(34,197,94,0.4), 0 4px 15px rgba(0,0,0,0.3)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+            fontFamily: FONT_FAMILY,
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+          <button onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
+            color: COLORS.gray,
+            border: '1px solid rgba(255,255,255,0.2)',
+            padding: '10px 30px',
+            borderRadius: 12,
+            fontSize: 14,
+            cursor: 'pointer',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+            fontFamily: FONT_FAMILY,
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
         }}>Back</button>
       )}
     </div>

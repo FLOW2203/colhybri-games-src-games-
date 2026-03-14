@@ -2,17 +2,22 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 15;
 const TARGET_LITRES = 11;
 const POOL_SIZE = 100;
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 export default function Game11Litres({ onComplete, onBack }) {
   const canvasRef = useRef(null);
   const [phase, setPhase] = useState('ready');
   const [displayScore, setDisplayScore] = useState(0);
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     litres: 0,
@@ -31,6 +36,7 @@ export default function Game11Litres({ onComplete, onBack }) {
     spillAmount: 0,
     totalScoops: 0,
     perfectScoops: 0,
+    endSoundPlayed: false,
     seagulls: Array(5).fill(null).map(() => ({
       x: -100, y: 80 + Math.random() * 200,
       speed: 80 + Math.random() * 120,
@@ -77,22 +83,34 @@ export default function Game11Litres({ onComplete, onBack }) {
 
   const handleSwipe = useCallback((direction) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        haptics.tapFeedback();
+        sounds.whoosh();
+      }
       return;
     }
     const s = state.current;
     if (direction === 'down') {
       s.targetAlt = 0.78;
       s.scooping = true;
+      haptics.tapFeedback();
+      sounds.wingflap();
     } else if (direction === 'up') {
       s.targetAlt = 0.2;
       s.scooping = false;
+      haptics.tapFeedback();
+      sounds.wingflap();
     }
-  }, [phase]);
+  }, [phase, haptics, sounds]);
 
   const handleTap = useCallback(() => {
-    if (phase === 'ready') setPhase('playing');
-  }, [phase]);
+    if (phase === 'ready') {
+      setPhase('playing');
+      haptics.tapFeedback();
+      sounds.pop();
+    }
+  }, [phase, haptics, sounds]);
 
   useTouch(canvasRef, { onSwipe: handleSwipe, onTap: handleTap });
 
@@ -115,6 +133,9 @@ export default function Game11Litres({ onComplete, onBack }) {
     const s = state.current;
     const cx = w / 2;
 
+    // Update juice system
+    juice.update(delta);
+
     // --- READY SCREEN ---
     if (phase === 'ready') {
       const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
@@ -136,22 +157,32 @@ export default function Game11Litres({ onComplete, onBack }) {
       ctx.fillStyle = '#1565C0';
       ctx.fill();
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Title with neon effect
+      juice.drawNeonText(ctx, '11 Litres', cx, h * 0.25, '#00D4FF', 32);
+
+      // Subtitle
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('11 Litres', cx, h * 0.25);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.cyan;
+      ctx.shadowColor = COLORS.cyan;
+      ctx.shadowBlur = 8;
       ctx.fillText("A pelican's pouch holds 11 litres!", cx, h * 0.35);
-      ctx.font = '15px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `15px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('SWIPE DOWN to scoop water', cx, h * 0.47);
       ctx.fillText('SWIPE UP to fly higher & dodge', cx, h * 0.47 + 22);
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillStyle = COLORS.white;
-      ctx.globalAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
-      ctx.fillText('TAP TO START', cx, h * 0.62);
+
+      // Pulsing start text with neon
+      const pulse = 0.5 + Math.sin(elapsed * 4) * 0.5;
+      ctx.globalAlpha = pulse;
+      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.62, '#00D4FF', 22);
       ctx.globalAlpha = 1;
+
+      // Glow on water surface
+      juice.drawGlow(ctx, cx, waveY, 120, '#00BFFF', 0.15 + Math.sin(elapsed * 2) * 0.05);
+
       ctx.restore();
       return;
     }
@@ -167,6 +198,12 @@ export default function Game11Litres({ onComplete, onBack }) {
 
     if (s.scoopCooldown > 0) s.scoopCooldown -= delta;
 
+    // Low time warning haptic
+    if (s.timeLeft <= 3 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.countdown(false);
+    }
+
     // Scoop when pelican near water
     const waveSurface = h * 0.75;
     if (s.scooping && s.pelicanY > waveSurface && s.scoopCooldown <= 0 && s.litres < TARGET_LITRES) {
@@ -181,8 +218,16 @@ export default function Game11Litres({ onComplete, onBack }) {
       if (amt >= 1.5) s.perfectScoops++;
       s.targetAlt = 0.35;
       s.scooping = false;
-      spawnParticles(s.pelicanX, s.pelicanY + 15, 8, [[0, 191, 255], [0, 150, 220], [255, 255, 255]]);
+      spawnParticles(s.pelicanX, s.pelicanY + 15, 12, [[0, 191, 255], [0, 150, 220], [255, 255, 255]]);
       sounds.splash();
+      sounds.drop();
+      haptics.impactFeedback();
+      juice.flash('#00BFFF', 0.3);
+      if (amt >= 1.5) {
+        haptics.comboFeedback(2);
+        sounds.combo(s.perfectScoops);
+        juice.flash('#F5A623', 0.4);
+      }
     }
 
     s.scoopFlash *= Math.pow(0.01, delta);
@@ -209,8 +254,11 @@ export default function Game11Litres({ onComplete, onBack }) {
         s.spillAmount = 1;
         g.active = false;
         g.spawnTimer = 3 + Math.random() * 4;
-        spawnParticles(s.pelicanX, s.pelicanY, 6, [[239, 68, 68], [255, 150, 100], [255, 255, 255]]);
-        sounds.tick();
+        spawnParticles(s.pelicanX, s.pelicanY, 10, [[239, 68, 68], [255, 150, 100], [255, 255, 255]]);
+        sounds.impact();
+        haptics.heavyFeedback();
+        juice.shake(10, 0.35);
+        juice.flash('#EF4444', 0.4);
         continue;
       }
       if (g.x < -60) {
@@ -241,12 +289,25 @@ export default function Game11Litres({ onComplete, onBack }) {
     // Game over check
     if (s.timeLeft <= 0 && phase === 'playing') {
       const speedBonus = s.litres >= TARGET_LITRES ? 2.0 : 1.0;
+      const finalScore = Math.round(s.litres * speedBonus * 10);
       setPhase('ended');
-      setDisplayScore(Math.round(s.litres * speedBonus * 10));
+      setDisplayScore(finalScore);
+      if (s.litres >= TARGET_LITRES) {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#22C55E', 0.5);
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#EF4444', 0.5);
+      }
       return;
     }
 
     // --- RENDER ---
+    // Apply shake before drawing
+    juice.applyShake(ctx);
+
     const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
     skyGrad.addColorStop(0, '#1a5276');
     skyGrad.addColorStop(0.5, '#5dade2');
@@ -284,7 +345,10 @@ export default function Game11Litres({ onComplete, onBack }) {
       ctx.globalAlpha = 1;
     }
 
-    // Screen flashes
+    // Water surface glow
+    juice.drawGlow(ctx, cx, waveBase, 200, '#0077B6', 0.12 + Math.sin(elapsed * 1.5) * 0.04);
+
+    // Screen flashes (original)
     if (s.scoopFlash > 0.01) {
       ctx.fillStyle = `rgba(0,191,255,${s.scoopFlash * 0.4})`;
       ctx.fillRect(0, 0, w, h);
@@ -294,8 +358,16 @@ export default function Game11Litres({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
     }
 
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
+
     // Draw pelican
     const px = s.pelicanX, py = s.pelicanY;
+
+    // Pelican glow
+    const pouchFill = s.litres / TARGET_LITRES;
+    juice.drawGlow(ctx, px + 20, py, 45 + pouchFill * 20, '#00BFFF', 0.15 + pouchFill * 0.15);
+
     ctx.save(); ctx.translate(px, py);
     // Body
     ctx.beginPath(); ctx.ellipse(0, 0, 30, 16, 0, 0, Math.PI * 2); ctx.fillStyle = '#F5F5DC'; ctx.fill();
@@ -308,7 +380,6 @@ export default function Game11Litres({ onComplete, onBack }) {
     ctx.beginPath(); ctx.moveTo(40, -8); ctx.lineTo(65, -6); ctx.lineTo(65, -2); ctx.lineTo(40, 2);
     ctx.closePath(); ctx.fillStyle = '#F5A623'; ctx.fill();
     // Pouch (bulges with water)
-    const pouchFill = s.litres / TARGET_LITRES;
     ctx.beginPath(); ctx.moveTo(40, 2); ctx.quadraticCurveTo(52, 8 + pouchFill * 10, 65, -2);
     ctx.strokeStyle = '#E8941A'; ctx.lineWidth = 1.5; ctx.stroke();
     if (pouchFill > 0) { ctx.fillStyle = `rgba(0,150,220,${0.4 + pouchFill * 0.4})`; ctx.fill(); }
@@ -328,6 +399,11 @@ export default function Game11Litres({ onComplete, onBack }) {
     // Draw seagulls
     for (const g of s.seagulls) {
       if (!g.active) continue;
+      // Seagull danger glow
+      const distToPelican = Math.sqrt((g.x - s.pelicanX) ** 2 + (g.y - s.pelicanY) ** 2);
+      if (distToPelican < 120) {
+        juice.drawGlow(ctx, g.x, g.y, 30, '#EF4444', 0.2 * (1 - distToPelican / 120));
+      }
       ctx.save(); ctx.translate(g.x, g.y);
       const sw = Math.sin(g.wingPhase) * 12;
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-8, -10 + sw, -20, -5 + sw * 0.5);
@@ -337,7 +413,9 @@ export default function Game11Litres({ onComplete, onBack }) {
       ctx.restore();
     }
 
-    // Draw particles
+    // Draw particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -350,36 +428,38 @@ export default function Game11Litres({ onComplete, onBack }) {
         ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`; ctx.fill();
       }
     }
+    ctx.restore();
 
-    // Scoop amount popup
+    // Scoop amount popup with neon
     if (s.scoopFlash > 0.05) {
       ctx.save();
       ctx.globalAlpha = Math.min(1, s.scoopFlash * 3);
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'center';
       const isPerfect = s.lastScoopAmount >= 1.5;
-      ctx.fillStyle = isPerfect ? COLORS.gold : COLORS.cyan;
       const label = isPerfect ? `+${s.lastScoopAmount.toFixed(1)}L PERFECT!` : `+${s.lastScoopAmount.toFixed(1)}L`;
-      ctx.fillText(label, px, py - 40 - (1 - s.scoopFlash) * 30);
+      const popupY = py - 40 - (1 - s.scoopFlash) * 30;
+      const popupColor = isPerfect ? COLORS.gold : COLORS.cyan;
+      juice.drawNeonText(ctx, label, px, popupY, popupColor, 24);
       ctx.restore();
     }
 
-    // Spill popup
+    // Spill popup with neon
     if (s.spillFlash > 0.05) {
       ctx.save();
       ctx.globalAlpha = Math.min(1, s.spillFlash * 3);
-      ctx.font = 'bold 22px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.red;
-      ctx.fillText(`-${s.spillAmount}L SPILL!`, px, py - 50 - (1 - s.spillFlash) * 20);
+      const spillY = py - 50 - (1 - s.spillFlash) * 20;
+      juice.drawNeonText(ctx, `-${s.spillAmount}L SPILL!`, px, spillY, COLORS.red, 22);
       ctx.restore();
     }
 
-    // Water gauge (left side)
+    // Water gauge (left side) with glow
     const gx = 28;
     const gt = h * 0.15;
     const gh = h * 0.45;
     const gw = 22;
+
+    // Gauge glow based on fill
+    juice.drawGlow(ctx, gx, gt + gh / 2, 35, '#00BFFF', 0.1 + pouchFill * 0.15);
+
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.strokeStyle = 'rgba(255,255,255,0.3)';
     ctx.lineWidth = 1.5;
@@ -397,36 +477,45 @@ export default function Game11Litres({ onComplete, onBack }) {
     ctx.roundRect(gx - gw / 2 + 2, gt + gh - fillH + 2, gw - 4, fillH - 4, 4);
     ctx.fill();
 
-    ctx.font = 'bold 16px sans-serif';
+    // Gauge text with neon
+    juice.drawNeonText(ctx, `${s.litres.toFixed(1)}`, gx, gt - 12, '#00D4FF', 16);
+    ctx.font = `11px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`${s.litres.toFixed(1)}`, gx, gt - 8);
-    ctx.font = '11px sans-serif';
     ctx.fillStyle = COLORS.cyan;
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 6;
     ctx.fillText(`/ ${TARGET_LITRES}L`, gx, gt + 8);
+    ctx.shadowBlur = 0;
 
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 3 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
 
-    // Timer text
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Timer glow at the edge
+    if (timerFrac > 0) {
+      juice.drawGlow(ctx, w * timerFrac, 2, 15, timerColor, 0.4);
+    }
+
+    // Timer text with neon
+    const timerTextColor = s.timeLeft < 3 ? COLORS.red : COLORS.white;
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 30, 38, timerTextColor, 24);
 
     // Altitude indicator
-    ctx.font = '13px sans-serif';
+    ctx.font = `13px ${FONT_FAMILY}`;
     ctx.textAlign = 'right';
     ctx.fillStyle = COLORS.gray;
+    ctx.shadowColor = COLORS.gray;
+    ctx.shadowBlur = 4;
     const altLabel = s.altitude < 0.5 ? 'HIGH' : s.altitude < 0.7 ? 'MID' : 'LOW';
     ctx.fillText(altLabel, w - 20, 60);
+    ctx.shadowBlur = 0;
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+  }, [phase, sounds, spawnParticles, haptics, juice]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -443,6 +532,7 @@ export default function Game11Litres({ onComplete, onBack }) {
       s.scoopCooldown = 0;
       s.totalScoops = 0;
       s.perfectScoops = 0;
+      s.endSoundPlayed = false;
       for (const g of s.seagulls) {
         g.active = false;
         g.spawnTimer = 2 + Math.random() * 4;
@@ -459,6 +549,7 @@ export default function Game11Litres({ onComplete, onBack }) {
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
   const finalLitres = phase === 'ended' ? state.current.litres.toFixed(1) : 0;
+  const isWin = phase === 'ended' && state.current.litres >= TARGET_LITRES;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
@@ -467,38 +558,118 @@ export default function Game11Litres({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>
-            Results
+          <div style={{
+            color: isWin ? COLORS.green : COLORS.cyan,
+            fontSize: 30,
+            fontWeight: 'bold',
+            marginBottom: 16,
+            textShadow: `0 0 20px ${isWin ? COLORS.green : COLORS.cyan}, 0 0 40px ${isWin ? COLORS.green : COLORS.cyan}80`,
+          }}>
+            {isWin ? 'Pouch Full!' : 'Results'}
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.cyan,
+            fontSize: 20,
+            marginBottom: 8,
+            textShadow: `0 0 10px ${COLORS.cyan}80`,
+          }}>
             {finalLitres} / {TARGET_LITRES} litres
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 16, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.gold,
+            fontSize: 16,
+            marginBottom: 8,
+            textShadow: `0 0 8px ${COLORS.gold}60`,
+          }}>
             Scoops: {state.current.totalScoops} (Perfect: {state.current.perfectScoops})
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white,
+            fontSize: 48,
+            fontWeight: 'bold',
+            marginBottom: 4,
+            textShadow: `0 0 20px ${isWin ? COLORS.green : COLORS.cyan}, 0 0 60px ${isWin ? COLORS.green : COLORS.cyan}60`,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
-          <button onClick={() => onComplete(displayScore)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
-            cursor: 'pointer', marginBottom: 12,
-          }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
-          }}>Back</button>
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 14,
+            marginBottom: 28,
+            textShadow: '0 0 6px rgba(156,163,175,0.4)',
+          }}>
+            points
+          </div>
+          <button
+            onClick={() => {
+              haptics.tapFeedback();
+              sounds.pop();
+              onComplete(displayScore);
+            }}
+            style={{
+              background: `linear-gradient(135deg, ${COLORS.cyan}, #0099CC)`,
+              color: COLORS.primary,
+              border: 'none',
+              padding: '14px 44px',
+              borderRadius: 14,
+              fontSize: 18,
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginBottom: 12,
+              fontFamily: FONT_FAMILY,
+              boxShadow: `0 0 20px ${COLORS.cyan}50, 0 4px 15px rgba(0,0,0,0.3)`,
+              textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+              transition: 'transform 0.1s',
+            }}
+          >
+            Continue
+          </button>
+          <button
+            onClick={() => {
+              haptics.tapFeedback();
+              onBack();
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              color: COLORS.gray,
+              border: `1px solid rgba(255,255,255,0.15)`,
+              padding: '10px 32px',
+              borderRadius: 14,
+              fontSize: 14,
+              cursor: 'pointer',
+              fontFamily: FONT_FAMILY,
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+              transition: 'transform 0.1s',
+            }}
+          >
+            Back
+          </button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
-          position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
-          color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
-          fontSize: 14, cursor: 'pointer', zIndex: 10,
-        }}>Back</button>
+        <button
+          onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }}
+          style={{
+            position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
+            color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
+            fontSize: 14, cursor: 'pointer', zIndex: 10,
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+          }}
+        >
+          Back
+        </button>
       )}
     </div>
   );

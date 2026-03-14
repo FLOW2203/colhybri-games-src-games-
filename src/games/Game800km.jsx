@@ -2,8 +2,11 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 const GAME_DURATION = 60;
 const GOAL_KM = 800;
 const FAT_MAX = 2.0;
@@ -17,6 +20,8 @@ export default function Game800km({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -59,6 +64,7 @@ export default function Game800km({ onComplete, onBack }) {
     feedbackText: '',
     feedbackTimer: 0,
     dodgeFlash: 0,
+    lastGustHitTime: 0,
   });
 
   const spawnParticles = useCallback((cx, cy, count, r, g, b) => {
@@ -127,7 +133,11 @@ export default function Game800km({ onComplete, onBack }) {
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        haptics.tapFeedback();
+        sounds.countdown(true);
+      }
       return;
     }
     const s = state.current;
@@ -148,22 +158,30 @@ export default function Game800km({ onComplete, onBack }) {
     if (nearest) {
       nearest.active = false;
       s.fat = Math.min(FAT_MAX, s.fat + FAT_PER_INSECT);
-      spawnParticles(nearest.x, nearest.y, 8, 100, 255, 100);
+      spawnParticles(nearest.x, nearest.y, 12, 100, 255, 100);
       s.feedbackText = `+${FAT_PER_INSECT.toFixed(2)}g`;
       s.feedbackTimer = 0.5;
-      sounds.tick();
+      sounds.pop();
+      haptics.tapFeedback();
+      juice.flash('#22C55E', 0.15);
+    } else {
+      haptics.tapFeedback();
     }
-  }, [phase, sounds, spawnParticles]);
+  }, [phase, sounds, haptics, juice, spawnParticles]);
 
   const handleSwipe = useCallback((direction) => {
     if (phase !== 'playing') return;
     const s = state.current;
     if (direction === 'up') {
       s.birdLane = Math.max(0, s.birdLane - 1);
+      sounds.wingflap();
+      haptics.tapFeedback();
     } else if (direction === 'down') {
       s.birdLane = Math.min(2, s.birdLane + 1);
+      sounds.wingflap();
+      haptics.tapFeedback();
     }
-  }, [phase]);
+  }, [phase, sounds, haptics]);
 
   useTouch(canvasRef, { onTap: handleTap, onSwipe: handleSwipe });
 
@@ -182,6 +200,9 @@ export default function Game800km({ onComplete, onBack }) {
     const ctx = canvas.getContext('2d');
     ctx.save();
     ctx.scale(dpr, dpr);
+
+    // Apply juice updates
+    juice.update(delta);
 
     const s = state.current;
     const cx = w / 2;
@@ -204,26 +225,33 @@ export default function Game800km({ onComplete, onBack }) {
       ctx.lineTo(w, h * 0.55);
       ctx.stroke();
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+      // Title with neon glow
+      juice.drawNeonText(ctx, '800km La Traversee', cx, cy - 90, COLORS.cyan, 26);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('800km La Traversee', cx, cy - 90);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.cyan;
       ctx.fillText('Cross the Gulf of Mexico', cx, cy - 50);
       ctx.fillText('with only 2g of fat!', cx, cy - 26);
-      ctx.font = '16px sans-serif';
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Tap insects for fuel, swipe to dodge wind', cx, cy + 30);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing TAP TO START with neon
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 90);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 90, COLORS.mint, 20);
       ctx.globalAlpha = 1;
+
+      // Glow on title
+      juice.drawGlow(ctx, cx, cy - 90, 80, COLORS.cyan, 0.15);
+
       ctx.restore();
       return;
     }
+
+    // Apply shake before drawing
+    juice.applyShake(ctx);
 
     // Update time
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
@@ -289,6 +317,14 @@ export default function Game800km({ onComplete, onBack }) {
           if (s.birdY > g.y && s.birdY < g.y + g.h) {
             s.fat -= 0.15 * delta;
             s.dodgeFlash = Math.max(s.dodgeFlash, 0.1);
+            // Haptic + shake on gust hit (throttled)
+            if (elapsed - s.lastGustHitTime > 0.5) {
+              s.lastGustHitTime = elapsed;
+              haptics.impactFeedback();
+              juice.shake(4, 0.2);
+              juice.flash('#EF4444', 0.2);
+              sounds.impact();
+            }
           }
         }
       }
@@ -316,6 +352,11 @@ export default function Game800km({ onComplete, onBack }) {
     if (s.dodgeFlash > 0) s.dodgeFlash -= delta;
     if (s.flashAlpha > 0) s.flashAlpha -= delta;
 
+    // Low fat warning haptic
+    if (s.fat > 0 && s.fat < 0.4 && Math.floor(elapsed * 2) % 2 === 0 && Math.floor((elapsed - delta) * 2) % 2 !== 0) {
+      haptics.warningFeedback();
+    }
+
     // Game over conditions
     if (s.fat <= 0 && phase === 'playing') {
       s.fat = 0;
@@ -323,6 +364,10 @@ export default function Game800km({ onComplete, onBack }) {
       s.score = Math.round(s.distance);
       setPhase('ended');
       setDisplayScore(Math.round(s.distance));
+      sounds.fail();
+      haptics.failFeedback();
+      juice.shake(12, 0.5);
+      juice.flash('#EF4444', 0.5);
       return;
     }
     if (s.distance >= GOAL_KM && phase === 'playing') {
@@ -330,7 +375,9 @@ export default function Game800km({ onComplete, onBack }) {
       s.score = Math.round(s.distance);
       setPhase('ended');
       setDisplayScore(Math.round(s.distance));
-      sounds.chime();
+      sounds.success();
+      haptics.successFeedback();
+      juice.flash('#22C55E', 0.4);
       return;
     }
     if (s.timeLeft <= 0 && phase === 'playing') {
@@ -338,6 +385,16 @@ export default function Game800km({ onComplete, onBack }) {
       s.score = Math.round(s.distance);
       setPhase('ended');
       setDisplayScore(Math.round(s.distance));
+      if (s.won) {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#22C55E', 0.4);
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.shake(10, 0.4);
+        juice.flash('#EF4444', 0.4);
+      }
       return;
     }
 
@@ -411,6 +468,11 @@ export default function Game800km({ onComplete, onBack }) {
       ctx.lineWidth = 2;
       ctx.strokeRect(g.x, g.y, g.w, g.h);
 
+      // Glow on active gusts
+      if (g.warningTime <= 0) {
+        juice.drawGlow(ctx, g.x + g.w / 2, g.y + g.h / 2, g.w * 0.6, '#EF4444', g.alpha * 0.2);
+      }
+
       // Wind streaks
       if (g.warningTime <= 0) {
         ctx.strokeStyle = `rgba(255,150,150,${g.alpha * 0.4})`;
@@ -426,14 +488,14 @@ export default function Game800km({ onComplete, onBack }) {
       } else {
         // Warning exclamation
         const warnAlpha = 0.5 + Math.sin(elapsed * 10) * 0.5;
-        ctx.font = 'bold 18px sans-serif';
+        ctx.font = `bold 18px ${FONT_FAMILY}`;
         ctx.textAlign = 'center';
         ctx.fillStyle = `rgba(255,100,100,${warnAlpha})`;
         ctx.fillText('!', g.x + g.w / 2, g.y + g.h / 2 + 6);
       }
     }
 
-    // Insects
+    // Insects with glow
     for (const ins of s.insects) {
       if (!ins.active) continue;
       ctx.save();
@@ -463,7 +525,7 @@ export default function Game800km({ onComplete, onBack }) {
       ctx.fill();
       ctx.restore();
 
-      // Green glow
+      // Green glow (enhanced with juice.drawGlow)
       const insGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, ins.size * 3);
       insGlow.addColorStop(0, 'rgba(100,255,100,0.15)');
       insGlow.addColorStop(1, 'rgba(100,255,100,0)');
@@ -473,6 +535,9 @@ export default function Game800km({ onComplete, onBack }) {
       ctx.fill();
 
       ctx.restore();
+
+      // Additive glow via juice
+      juice.drawGlow(ctx, ins.x, ins.y, ins.size * 4, '#22C55E', 0.2);
     }
 
     // Hummingbird
@@ -552,7 +617,12 @@ export default function Game800km({ onComplete, onBack }) {
 
     ctx.restore();
 
-    // Particles
+    // Bird glow
+    juice.drawGlow(ctx, birdX, s.birdY, 30, COLORS.mint, 0.2 + Math.sin(elapsed * 3) * 0.05);
+
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -561,12 +631,16 @@ export default function Game800km({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
     // Dodge flash
     if (s.dodgeFlash > 0) {
       ctx.fillStyle = `rgba(239,68,68,${s.dodgeFlash * 0.3})`;
       ctx.fillRect(0, 0, w, h);
     }
+
+    // Draw juice flash overlay
+    juice.drawFlash(ctx, w, h);
 
     // --- HUD ---
     // Fat gauge
@@ -584,7 +658,13 @@ export default function Game800km({ onComplete, onBack }) {
     ctx.beginPath();
     ctx.roundRect(gaugeX, gaugeY, gaugeW * fatFrac, gaugeH, 7);
     ctx.fill();
-    ctx.font = '11px sans-serif';
+
+    // Fat gauge glow when low
+    if (s.fat < 0.4) {
+      juice.drawGlow(ctx, gaugeX + gaugeW * fatFrac / 2, gaugeY + gaugeH / 2, 30, COLORS.red, 0.2 + Math.sin(elapsed * 6) * 0.1);
+    }
+
+    ctx.font = `11px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.white;
     ctx.fillText(`Fat: ${Math.max(0, s.fat).toFixed(2)}g / ${FAT_MAX}g`, gaugeX, gaugeY - 4);
@@ -602,17 +682,21 @@ export default function Game800km({ onComplete, onBack }) {
     ctx.roundRect(20, distBarY, distBarW * distFrac, 10, 5);
     ctx.fill();
 
+    // Distance bar glow at tip
+    const tipX = 20 + distBarW * distFrac;
+    juice.drawGlow(ctx, tipX, distBarY + 5, 15, COLORS.cyan, 0.3);
+
     // Distance labels
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.white;
     ctx.fillText('0km', 20, distBarY - 4);
     ctx.textAlign = 'right';
     ctx.fillText(`${GOAL_KM}km`, w - 20, distBarY - 4);
+
+    // Distance neon text
     ctx.textAlign = 'center';
-    ctx.font = 'bold 14px sans-serif';
-    ctx.fillStyle = COLORS.cyan;
-    ctx.fillText(`${Math.round(s.distance)}km`, cx, distBarY - 4);
+    juice.drawNeonText(ctx, `${Math.round(s.distance)}km`, cx, distBarY - 6, COLORS.cyan, 14);
 
     // Bird marker on distance bar
     const markerX = 20 + distBarW * distFrac;
@@ -621,14 +705,11 @@ export default function Game800km({ onComplete, onBack }) {
     ctx.fillStyle = COLORS.mint;
     ctx.fill();
 
-    // Feedback text
+    // Feedback text with neon
     if (s.feedbackTimer > 0) {
       const alpha = Math.min(1, s.feedbackTimer * 3);
       ctx.globalAlpha = alpha;
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.green;
-      ctx.fillText(s.feedbackText, cx, cy - 40);
+      juice.drawNeonText(ctx, s.feedbackText, cx, cy - 40, COLORS.green, 24);
       ctx.globalAlpha = 1;
     }
 
@@ -639,11 +720,15 @@ export default function Game800km({ onComplete, onBack }) {
     ctx.fillStyle = s.timeLeft < 10 ? COLORS.red : COLORS.cyan;
     ctx.fillRect(0, 0, w * timerFrac, 4);
 
-    // Timer
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 10 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Timer with neon when low
+    if (s.timeLeft < 10) {
+      juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, COLORS.red, 24);
+    } else {
+      ctx.font = `bold 24px ${FONT_FAMILY}`;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = COLORS.white;
+      ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    }
 
     // Lane indicators on left edge
     for (let lane = 0; lane < 3; lane++) {
@@ -652,16 +737,19 @@ export default function Game800km({ onComplete, onBack }) {
       ctx.arc(15, ly, lane === s.birdLane ? 5 : 3, 0, Math.PI * 2);
       ctx.fillStyle = lane === s.birdLane ? COLORS.mint : 'rgba(255,255,255,0.2)';
       ctx.fill();
+      if (lane === s.birdLane) {
+        juice.drawGlow(ctx, 15, ly, 12, COLORS.mint, 0.3);
+      }
     }
 
     // Speed indicator
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.gray;
     ctx.fillText(`Speed x${s.speed.toFixed(1)}`, 20, 84);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, spawnInsect, spawnGust]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnInsect, spawnGust]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -681,6 +769,7 @@ export default function Game800km({ onComplete, onBack }) {
       s.insectSpawnTimer = 0.5;
       s.gustSpawnTimer = 3;
       s.scrollOffset = 0;
+      s.lastGustHitTime = 0;
       for (const ins of s.insects) ins.active = false;
       for (const g of s.windGusts) g.active = false;
       gameLoop.reset();
@@ -701,14 +790,25 @@ export default function Game800km({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 12 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 12,
+            textShadow: state.current.won
+              ? `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`
+              : `0 0 20px ${COLORS.red}, 0 0 40px ${COLORS.red}80`,
+          }}>
             {state.current.won ? 'Crossing Complete!' : (state.current.fat <= 0 ? 'Out of Fuel!' : "Time's Up!")}
           </div>
           <div style={{
             color: state.current.won ? COLORS.mint : COLORS.cyan,
             fontSize: 48, fontWeight: 'bold', marginBottom: 8,
+            textShadow: state.current.won
+              ? `0 0 30px ${COLORS.mint}, 0 0 60px ${COLORS.mint}80`
+              : `0 0 30px ${COLORS.cyan}, 0 0 60px ${COLORS.cyan}80`,
           }}>
             {displayScore}km
           </div>
@@ -718,22 +818,63 @@ export default function Game800km({ onComplete, onBack }) {
           <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>
             Hummingbirds cross 800km on 2g of fat!
           </div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
-          }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
-          }}>Back</button>
+          <button
+            onClick={() => {
+              haptics.tapFeedback();
+              sounds.chime();
+              onComplete(state.current.score);
+            }}
+            style={{
+              background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+              color: COLORS.primary,
+              border: 'none',
+              padding: '14px 40px',
+              borderRadius: 12,
+              fontSize: 18,
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginBottom: 12,
+              fontFamily: FONT_FAMILY,
+              boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
+              textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+            }}
+          >Continue</button>
+          <button
+            onClick={() => {
+              haptics.tapFeedback();
+              onBack();
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              color: COLORS.gray,
+              border: `1px solid ${COLORS.gray}50`,
+              padding: '10px 30px',
+              borderRadius: 12,
+              fontSize: 14,
+              cursor: 'pointer',
+              fontFamily: FONT_FAMILY,
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+            }}
+          >Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
-          position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
-          color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
-          fontSize: 14, cursor: 'pointer', zIndex: 10,
-        }}>Back</button>
+        <button
+          onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }}
+          style={{
+            position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
+            color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
+            fontSize: 14, cursor: 'pointer', zIndex: 10,
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+          }}
+        >Back</button>
       )}
     </div>
   );
