@@ -2,8 +2,11 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 const GAME_DURATION = 45;
 const POOL_SIZE = 100;
 const TEMP_MIN = 32;
@@ -19,6 +22,8 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
   const [phase, setPhase] = useState('ready');
   const [displayScore, setDisplayScore] = useState(0);
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION, temperature: 38, score: 0, safeTime: 0,
@@ -26,6 +31,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     weatherTimer: 0, weatherDuration: 7, isHolding: false,
     beakGlow: 0, beakCoolFlash: 0, tapCoolTimer: 0,
     toucanBob: 0, sunAngle: 0, gaugeShake: 0,
+    wasInSafe: true, lastWarningTime: 0, endTriggered: false,
     raindrops: Array(25).fill(null).map(() => ({ x: 0, y: 0, speed: 0, active: false, len: 10 })),
     windLines: Array(15).fill(null).map(() => ({ x: 0, y: 0, speed: 0, active: false, len: 30 })),
     particles: Array(POOL_SIZE).fill(null).map(() => ({
@@ -40,7 +46,9 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     s.weather = avail[Math.floor(Math.random() * avail.length)];
     s.weatherDuration = 6 + Math.random() * 2;
     s.weatherTimer = 0;
-  }, []);
+    sounds.whoosh();
+    haptics.tapFeedback();
+  }, [sounds, haptics]);
 
   const spawnParticles = useCallback((cx, cy, count, hot) => {
     const s = state.current;
@@ -70,13 +78,16 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     s.temperature = Math.max(TEMP_MIN, s.temperature - TAP_COOL);
     s.beakCoolFlash = 0.5;
     s.tapCoolTimer = 0.3;
-    sounds.tick();
+    sounds.pop();
+    haptics.tapFeedback();
+    juice.shake(3, 0.15);
+    juice.flash('#FF6B35', 0.15);
     const canvas = canvasRef.current;
     const dpr = window.devicePixelRatio || 1;
     const w = canvas ? canvas.width / dpr : 400;
     const h = canvas ? canvas.height / dpr : 700;
     spawnParticles(w * 0.5 + 50, h * 0.4 - 10, 6, true);
-  }, [phase, sounds, spawnParticles]);
+  }, [phase, sounds, haptics, juice, spawnParticles]);
 
   const handleHoldStart = useCallback(() => { if (phase === 'playing') state.current.isHolding = true; }, [phase]);
   const handleHoldEnd = useCallback(() => { state.current.isHolding = false; }, []);
@@ -163,12 +174,12 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     ctx.fillStyle = COLORS.white;
     ctx.beginPath(); ctx.moveTo(mx, -6); ctx.lineTo(mx - 5, -12); ctx.lineTo(mx + 5, -12); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.roundRect(mx - 2, -1, 4, gH + 2, 1); ctx.fill();
-    ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+    ctx.font = `11px ${FONT_FAMILY}`; ctx.textAlign = 'center';
     ctx.fillStyle = '#88bbff'; ctx.fillText(`${TEMP_MIN}\u00B0`, 0, gH + 14);
     ctx.fillStyle = '#22c55e'; ctx.fillText(`${SAFE_LOW}\u00B0`, gW * coldEnd, gH + 14);
     ctx.fillText(`${SAFE_HIGH}\u00B0`, gW * safeEnd, gH + 14);
     ctx.fillStyle = '#ff6666'; ctx.fillText(`${TEMP_MAX}\u00B0`, gW, gH + 14);
-    ctx.font = 'bold 18px sans-serif';
+    ctx.font = `bold 18px ${FONT_FAMILY}`;
     const inS = temp >= SAFE_LOW && temp <= SAFE_HIGH;
     ctx.fillStyle = inS ? COLORS.green : (temp > SAFE_HIGH ? COLORS.red : '#5599ff');
     ctx.fillText(`${temp.toFixed(1)}\u00B0C`, gW / 2, -18);
@@ -190,24 +201,35 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     const s = state.current;
     const cx = w / 2;
 
+    // Update juice system
+    juice.update(delta);
+
     if (phase === 'ready') {
       const sg = ctx.createLinearGradient(0, 0, 0, h);
       sg.addColorStop(0, '#0f2b1a'); sg.addColorStop(0.6, '#1a4a2a'); sg.addColorStop(1, '#2d6b3f');
       ctx.fillStyle = sg; ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = COLORS.white; ctx.font = 'bold 26px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('Radiateur Naturel', cx, h * 0.25);
-      ctx.font = '17px sans-serif'; ctx.fillStyle = COLORS.cyan;
+
+      // Neon title
+      juice.drawNeonText(ctx, 'Radiateur Naturel', cx, h * 0.25, '#22c55e', 26);
+
+      // Glow behind toucan on ready screen
+      juice.drawGlow(ctx, cx, h * 0.15, 80, '#ff6b35', 0.2);
+
+      ctx.font = `17px ${FONT_FAMILY}`; ctx.textAlign = 'center'; ctx.fillStyle = COLORS.cyan;
       ctx.fillText('The toucan\'s beak is nature\'s', cx, h * 0.33);
       ctx.fillText('radiator \u2014 regulate body temperature!', cx, h * 0.37);
-      ctx.font = '15px sans-serif'; ctx.fillStyle = COLORS.gold;
+      ctx.font = `15px ${FONT_FAMILY}`; ctx.fillStyle = COLORS.gold;
       ctx.fillText('TAP beak = radiate heat (-2\u00B0C)', cx, h * 0.45);
       ctx.fillText('HOLD in sun = absorb heat (+1\u00B0C/s)', cx, h * 0.49);
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Keep temp between 36\u00B0-40\u00B0C \u2022 45s', cx, h * 0.55);
-      ctx.fillStyle = COLORS.white; ctx.font = 'bold 20px sans-serif';
-      ctx.globalAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
-      ctx.fillText('TAP TO START', cx, h * 0.68);
+
+      // Pulsing neon "TAP TO START"
+      const pulse = 0.5 + Math.sin(elapsed * 4) * 0.5;
+      ctx.globalAlpha = pulse;
+      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.68, '#00e5ff', 20);
       ctx.globalAlpha = 1;
+
       drawToucan(ctx, cx, h * 0.15, 38, elapsed * 2, 0, 0);
       ctx.restore(); return;
     }
@@ -229,6 +251,33 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     s.temperature = Math.max(TEMP_MIN, Math.min(TEMP_MAX, s.temperature));
 
     const inSafe = s.temperature >= SAFE_LOW && s.temperature <= SAFE_HIGH;
+
+    // Juice: detect leaving/entering safe zone
+    if (s.wasInSafe && !inSafe) {
+      // Left safe zone
+      juice.shake(5, 0.25);
+      juice.flash('#ef4444', 0.25);
+      sounds.fail();
+      haptics.warningFeedback();
+    } else if (!s.wasInSafe && inSafe) {
+      // Entered safe zone
+      juice.flash('#22c55e', 0.2);
+      sounds.chime();
+      haptics.successFeedback();
+    }
+    s.wasInSafe = inSafe;
+
+    // Warning haptics when temperature is extreme
+    if (!inSafe && s.timeLeft > 0) {
+      const extremity = s.temperature > SAFE_HIGH
+        ? (s.temperature - SAFE_HIGH) / (TEMP_MAX - SAFE_HIGH)
+        : (SAFE_LOW - s.temperature) / (SAFE_LOW - TEMP_MIN);
+      if (extremity > 0.7 && elapsed - s.lastWarningTime > 1.5) {
+        haptics.warningFeedback();
+        s.lastWarningTime = elapsed;
+      }
+    }
+
     s.beakGlow = (s.temperature > SAFE_HIGH) ? Math.min(1, (s.temperature - SAFE_HIGH) / 4)
       : (s.temperature < SAFE_LOW) ? Math.min(1, (SAFE_LOW - s.temperature) / 4) : s.beakGlow * 0.9;
     s.beakCoolFlash *= Math.pow(0.01, delta);
@@ -270,11 +319,33 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
       p.life -= delta; if (p.life <= 0) p.active = false;
     }
 
-    if (s.timeLeft <= 0 && phase === 'playing') {
-      setPhase('ended'); setDisplayScore(s.score); ctx.restore(); return;
+    // Low time warning sound
+    if (s.timeLeft <= 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      sounds.countdown(s.timeLeft <= 1);
+      haptics.warningFeedback();
+      juice.flash('#ef4444', 0.1);
+    }
+
+    if (s.timeLeft <= 0 && phase === 'playing' && !s.endTriggered) {
+      s.endTriggered = true;
+      const finalScore = s.score;
+      if (finalScore > 200) {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#22c55e', 0.4);
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#ef4444', 0.4);
+      }
+      juice.shake(6, 0.3);
+      setPhase('ended'); setDisplayScore(finalScore); ctx.restore(); return;
     }
 
     // --- RENDER ---
+    // Apply shake transform
+    juice.applyShake(ctx);
+
     const bgColors = s.weather === 'sun' ? ['#1a4a2a','#2d6b3f','#4a8a55']
       : s.weather === 'rain' ? ['#1a2a3a','#2a3a4a','#3a4a5a'] : ['#1a3a3a','#2a5a4a','#3a6a5a'];
     const sg = ctx.createLinearGradient(0, 0, 0, h);
@@ -308,6 +379,8 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     if (s.weather === 'sun') {
       const sunX = w * 0.82, sunY = h * 0.1;
       const pulse = 0.8 + Math.sin(s.sunAngle * 2) * 0.2;
+      // Sun glow effect
+      juice.drawGlow(ctx, sunX, sunY, 70 * pulse, '#ffdc50', 0.3);
       ctx.beginPath(); ctx.arc(sunX, sunY, 40 * pulse, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255,220,80,0.3)'; ctx.fill();
       ctx.beginPath(); ctx.arc(sunX, sunY, 28, 0, Math.PI * 2);
@@ -337,11 +410,24 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
       }
     }
 
-    // Toucan
+    // Toucan glow based on temperature state
     const tx = cx - 20, ty = h * 0.42 + Math.sin(s.toucanBob) * 4 - 26;
+    if (!inSafe) {
+      const glowColor = s.temperature > SAFE_HIGH ? '#ff4444' : '#4488ff';
+      const glowIntensity = s.temperature > SAFE_HIGH
+        ? Math.min(1, (s.temperature - SAFE_HIGH) / 4)
+        : Math.min(1, (SAFE_LOW - s.temperature) / 4);
+      juice.drawGlow(ctx, tx + 60, ty - 10, 50 + glowIntensity * 30, glowColor, glowIntensity * 0.35);
+    } else {
+      juice.drawGlow(ctx, tx + 60, ty - 10, 30, '#22c55e', 0.15);
+    }
+
+    // Toucan
     drawToucan(ctx, tx, ty, s.temperature, s.toucanBob, s.beakGlow, s.beakCoolFlash);
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const a = p.life / p.maxLife;
@@ -354,27 +440,28 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
         ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${a})`; ctx.fill();
       }
     }
+    ctx.restore();
 
     // Gauge
     const gW = w * 0.7, gH = 14, gX = (w - gW) / 2, gY = h * 0.62;
     drawGauge(ctx, gX + s.gaugeShake, gY, gW, gH, s.temperature);
 
-    // Weather indicator
-    ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
+    // Weather indicator with neon text
     const wLabel = s.weather === 'sun' ? '\u2600\uFE0F Sunny' : s.weather === 'rain' ? '\uD83C\uDF27\uFE0F Rain' : '\uD83C\uDF2C\uFE0F Wind';
-    ctx.fillStyle = s.weather === 'sun' ? COLORS.gold : s.weather === 'rain' ? '#88bbff' : COLORS.gray;
-    ctx.fillText(wLabel, cx, h * 0.72);
+    const wColor = s.weather === 'sun' ? '#ffd700' : s.weather === 'rain' ? '#88bbff' : '#aaddaa';
+    juice.drawNeonText(ctx, wLabel, cx, h * 0.72, wColor, 16);
+
     const wtW = 80, wtF = 1 - s.weatherTimer / s.weatherDuration;
     ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(cx - wtW / 2, h * 0.74, wtW, 4);
     ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(cx - wtW / 2, h * 0.74, wtW * wtF, 4);
 
     // Status text
-    ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+    ctx.font = `13px ${FONT_FAMILY}`; ctx.textAlign = 'center';
     if (s.isHolding && s.weather === 'sun') { ctx.fillStyle = COLORS.gold; ctx.fillText('Absorbing heat from sun...', cx, h * 0.86); }
     else if (s.tapCoolTimer > 0) { ctx.fillStyle = COLORS.mint; ctx.fillText('Radiating heat! -2\u00B0C', cx, h * 0.86); }
     else { ctx.fillStyle = COLORS.gray; ctx.fillText('TAP = cool \u2022 HOLD in sun = warm', cx, h * 0.86); }
 
-    ctx.font = 'bold 14px sans-serif';
+    ctx.font = `bold 14px ${FONT_FAMILY}`;
     if (inSafe) { ctx.fillStyle = COLORS.green; ctx.fillText('\u2713 Safe Zone', cx, h * 0.90); }
     else if (s.temperature > SAFE_HIGH) { ctx.fillStyle = COLORS.red; ctx.fillText('\u26A0 Too Hot! Tap to cool!', cx, h * 0.90); }
     else { ctx.fillStyle = '#5599ff'; ctx.fillText('\u26A0 Too Cold! Hold in sun!', cx, h * 0.90); }
@@ -383,16 +470,22 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(0, 0, w, 4);
     const tf = s.timeLeft / GAME_DURATION;
     ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan; ctx.fillRect(0, 0, w * tf, 4);
-    ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 16, 36);
-    ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white; ctx.fillText(`Score: ${s.score}`, 60, 36);
-    ctx.font = '14px sans-serif'; ctx.fillStyle = COLORS.green;
+
+    // Neon timer
+    const timerColor = s.timeLeft < 5 ? '#ef4444' : '#00e5ff';
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 36, 36, timerColor, 22);
+
+    // Neon score
+    juice.drawNeonText(ctx, `Score: ${s.score}`, 90, 36, '#ffffff', 18);
+
+    ctx.font = `14px ${FONT_FAMILY}`; ctx.textAlign = 'left'; ctx.fillStyle = COLORS.green;
     ctx.fillText(`Safe: ${s.safeTime.toFixed(1)}s`, 60, 56);
 
+    // Draw screen flash overlay
+    juice.drawFlash(ctx, w, h);
+
     ctx.restore();
-  }, [phase, nextWeather, drawToucan, drawGauge, spawnParticles]));
+  }, [phase, nextWeather, drawToucan, drawGauge, spawnParticles, juice, sounds, haptics]));
 
   useEffect(() => { if (phase === 'ready') gameLoop.start(); }, [phase, gameLoop]);
 
@@ -403,15 +496,22 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
       s.safeTime = 0; s.stabilitySum = 0; s.stabilitySamples = 0;
       s.weather = 'sun'; s.weatherTimer = 0; s.weatherDuration = 7;
       s.isHolding = false; s.beakGlow = 0; s.beakCoolFlash = 0; s.gaugeShake = 0;
+      s.wasInSafe = true; s.lastWarningTime = 0; s.endTriggered = false;
       for (const p of s.particles) p.active = false;
       for (const rd of s.raindrops) rd.active = false;
       for (const wl of s.windLines) wl.active = false;
+      sounds.countdown(true);
+      haptics.tapFeedback();
       gameLoop.reset(); gameLoop.start();
     }
-  }, [phase, gameLoop]);
+  }, [phase, gameLoop, sounds, haptics]);
 
   useEffect(() => { if (phase === 'ended') gameLoop.stop(); }, [phase, gameLoop]);
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
+
+  const safePercent = state.current.safeTime > 0
+    ? Math.round((state.current.safeTime / GAME_DURATION) * 100) : 0;
+  const isGoodScore = displayScore > 200;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
@@ -420,29 +520,89 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>Time's Up!</div>
-          <div style={{ color: COLORS.green, fontSize: 18, marginBottom: 8 }}>
-            Safe zone: {state.current.safeTime.toFixed(1)}s / {GAME_DURATION}s
+          <div style={{
+            color: isGoodScore ? '#22c55e' : '#ef4444',
+            fontSize: 28,
+            fontWeight: 'bold',
+            marginBottom: 16,
+            textShadow: isGoodScore
+              ? '0 0 20px rgba(34,197,94,0.6), 0 0 40px rgba(34,197,94,0.3)'
+              : '0 0 20px rgba(239,68,68,0.6), 0 0 40px rgba(239,68,68,0.3)',
+          }}>
+            Time's Up!
           </div>
-          <div style={{ color: COLORS.white, fontSize: 48, fontWeight: 'bold', marginBottom: 4 }}>{displayScore}</div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <div style={{
+            color: COLORS.green,
+            fontSize: 18,
+            marginBottom: 8,
+            textShadow: '0 0 10px rgba(34,197,94,0.4)',
+          }}>
+            Safe zone: {state.current.safeTime.toFixed(1)}s / {GAME_DURATION}s ({safePercent}%)
+          </div>
+          <div style={{
+            color: COLORS.white,
+            fontSize: 48,
+            fontWeight: 'bold',
+            marginBottom: 4,
+            textShadow: '0 0 30px rgba(0,229,255,0.6), 0 0 60px rgba(0,229,255,0.3)',
+          }}>{displayScore}</div>
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 14,
+            marginBottom: 24,
+            textShadow: '0 0 8px rgba(255,255,255,0.2)',
+          }}>points</div>
+          <button onClick={() => {
+            sounds.success();
+            haptics.tapFeedback();
+            onComplete(state.current.score);
+          }} style={{
+            background: 'linear-gradient(135deg, #00e5ff, #00b8d4)',
+            color: '#0a1628',
+            border: 'none',
+            padding: '14px 40px',
+            borderRadius: 12,
+            fontSize: 18,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: '0 0 20px rgba(0,229,255,0.4), 0 4px 15px rgba(0,0,0,0.3)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+          <button onClick={() => {
+            sounds.tick();
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'transparent',
+            color: COLORS.gray,
+            border: `1px solid rgba(255,255,255,0.2)`,
+            padding: '10px 30px',
+            borderRadius: 12,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            boxShadow: '0 0 10px rgba(255,255,255,0.05)',
+            textShadow: '0 0 8px rgba(255,255,255,0.15)',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          sounds.tick();
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
-          fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontSize: 14, cursor: 'pointer', zIndex: 10, fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         }}>Back</button>
       )}
     </div>

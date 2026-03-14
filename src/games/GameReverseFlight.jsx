@@ -2,6 +2,8 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 30;
@@ -16,12 +18,16 @@ const FLOWER_SPAWN_INTERVAL = 3.5;
 const SCROLL_SPEED = 120;
 const REVERSE_SPEED = -80;
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+
 export default function GameReverseFlight({ onComplete, onBack }) {
   const canvasRef = useRef(null);
   const [phase, setPhase] = useState('ready');
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     birdX: 0,
@@ -53,6 +59,8 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     flashAlpha: 0,
     hitCooldown: 0,
     wingAngle: 0,
+    // Trail points for hummingbird
+    trailPoints: [],
   });
 
   const spawnParticles = useCallback((cx, cy, count, colors) => {
@@ -85,12 +93,17 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     if (direction === 'left' && s.energy > 5) {
       s.reversing = true;
       sounds.whoosh();
+      haptics.impactFeedback();
     }
-  }, [phase, sounds]);
+  }, [phase, sounds, haptics]);
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        sounds.countdown(true);
+        haptics.tapFeedback();
+      }
       return;
     }
     const s = state.current;
@@ -107,13 +120,18 @@ export default function GameReverseFlight({ onComplete, onBack }) {
       if (dx * dx + dy * dy < (f.size + 20) * (f.size + 20)) {
         f.active = false;
         s.energy = Math.min(ENERGY_MAX, s.energy + FLOWER_ENERGY_BOOST);
-        spawnParticles(f.x, f.y, 8, [[255, 200, 50], [255, 150, 200], [255, 255, 100]]);
+        spawnParticles(f.x, f.y, 12, [[255, 200, 50], [255, 150, 200], [255, 255, 100]]);
         sounds.chime();
+        sounds.powerup();
+        haptics.comboFeedback(2);
+        juice.flash('#FFD700', 0.3);
+        juice.shake(3, 0.15);
         return;
       }
     }
     sounds.tick();
-  }, [phase, sounds, spawnParticles]);
+    haptics.tapFeedback();
+  }, [phase, sounds, spawnParticles, haptics, juice]);
 
   useTouch(canvasRef, { onTap: handleTap, onSwipe: handleSwipe });
 
@@ -137,6 +155,9 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     const cx = w * 0.3;
     const cy = h / 2;
 
+    // Update juice system
+    juice.update(delta);
+
     if (phase === 'ready') {
       const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
       skyGrad.addColorStop(0, '#0d2818');
@@ -145,23 +166,31 @@ export default function GameReverseFlight({ onComplete, onBack }) {
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Reverse Flight', w / 2, cy - 60, COLORS.mint, 28);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Reverse Flight', w / 2, cy - 60);
-      ctx.font = '18px sans-serif';
+      ctx.shadowColor = COLORS.cyan;
+      ctx.shadowBlur = 10;
       ctx.fillStyle = COLORS.mint;
       ctx.fillText('Hummingbirds can fly backwards!', w / 2, cy - 10);
-      ctx.font = '16px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('SWIPE LEFT to reverse', w / 2, cy + 30);
       ctx.fillText('TAP flowers to collect nectar', w / 2, cy + 56);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing neon "TAP TO START"
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', w / 2, cy + 110);
+      juice.drawNeonText(ctx, 'TAP TO START', w / 2, cy + 110, COLORS.cyan, 20);
       ctx.globalAlpha = 1;
+
+      // Glow behind title
+      juice.drawGlow(ctx, w / 2, cy - 60, 120, COLORS.mint, 0.15);
+
       ctx.restore();
       return;
     }
@@ -170,6 +199,12 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     s.hitCooldown = Math.max(0, s.hitCooldown - delta);
     s.wingAngle += delta * 25;
+
+    // Low time warning haptic
+    if (s.timeLeft <= 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.countdown(false);
+    }
 
     // Movement
     if (s.reversing) {
@@ -194,6 +229,10 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     for (const layer of s.parallaxLayers) {
       layer.offset += effectiveSpeed * layer.speed * delta;
     }
+
+    // Update trail points
+    s.trailPoints.push({ x: cx, y: cy });
+    if (s.trailPoints.length > 12) s.trailPoints.shift();
 
     // Spawn obstacles
     if (elapsed - s.lastObstacleTime > OBSTACLE_SPAWN_INTERVAL) {
@@ -251,8 +290,12 @@ export default function GameReverseFlight({ onComplete, onBack }) {
           s.hitCooldown = 1.0;
           s.flashAlpha = 0.5;
           o.active = false;
-          spawnParticles(cx, cy, 10, [[239, 68, 68], [255, 150, 100], [255, 255, 255]]);
+          spawnParticles(cx, cy, 15, [[239, 68, 68], [255, 150, 100], [255, 255, 255]]);
+          sounds.impact();
           sounds.firecrackle();
+          haptics.heavyFeedback();
+          juice.shake(12, 0.4);
+          juice.flash('#EF4444', 0.5);
         }
       }
     }
@@ -282,10 +325,20 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     if ((s.lives <= 0 || s.timeLeft <= 0) && phase === 'playing') {
       setPhase('ended');
       setDisplayScore(Math.floor(s.distance));
+      if (s.lives <= 0) {
+        sounds.fail();
+        haptics.failFeedback();
+      } else {
+        sounds.success();
+        haptics.successFeedback();
+      }
       return;
     }
 
     // --- RENDER ---
+    // Apply shake before drawing
+    juice.applyShake(ctx);
+
     // Sky
     const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
     skyGrad.addColorStop(0, '#0d2818');
@@ -316,16 +369,23 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     }
     ctx.globalAlpha = 1;
 
-    // Flash effect
+    // Flash effect (original)
     if (s.flashAlpha > 0.01) {
       ctx.fillStyle = `rgba(239,68,68,${s.flashAlpha})`;
       ctx.fillRect(0, 0, w, h);
     }
 
-    // Draw flowers
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
+
+    // Draw flowers with glow
     for (const f of s.flowers) {
       if (!f.active) continue;
       const fy = f.y + Math.sin(f.bobPhase) * 5;
+
+      // Glow effect behind flower
+      juice.drawGlow(ctx, f.x, fy, f.size * 3, '#ff69b4', 0.25 + Math.sin(f.bobPhase * 2) * 0.1);
+
       // Stem
       ctx.beginPath();
       ctx.moveTo(f.x, fy + f.size);
@@ -349,7 +409,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
       ctx.fill();
     }
 
-    // Draw obstacles
+    // Draw obstacles with subtle glow for predators
     for (const o of s.obstacles) {
       if (!o.active) continue;
       if (o.type === 'branch') {
@@ -361,6 +421,9 @@ export default function GameReverseFlight({ onComplete, onBack }) {
         ctx.fillStyle = '#3a7a3c';
         ctx.fill();
       } else {
+        // Predator glow - menacing red
+        juice.drawGlow(ctx, o.x, o.y, 30, '#EF4444', 0.15);
+
         // Predator (hawk silhouette)
         ctx.fillStyle = '#333';
         ctx.beginPath();
@@ -381,6 +444,14 @@ export default function GameReverseFlight({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+
+    // Draw hummingbird trail (additive blending)
+    if (s.trailPoints.length > 2) {
+      juice.drawTrail(ctx, s.trailPoints, s.reversing ? COLORS.cyan : COLORS.mint, 3);
+    }
+
+    // Glow behind hummingbird
+    juice.drawGlow(ctx, cx, cy, 50, s.reversing ? COLORS.cyan : COLORS.mint, s.reversing ? 0.35 : 0.2);
 
     // Draw hummingbird
     ctx.save();
@@ -435,9 +506,10 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     ctx.fillStyle = '#0d6b47';
     ctx.fill();
 
-    // Wings
+    // Wings (additive blending for glow effect)
     const wingY = Math.sin(s.wingAngle) * 20;
     ctx.globalAlpha = blinkAlpha * 0.7;
+    ctx.globalCompositeOperation = 'lighter';
     ctx.beginPath();
     ctx.moveTo(-4, -4);
     ctx.quadraticCurveTo(-25, -35 + wingY, -42, -18 + wingY * 0.7);
@@ -449,24 +521,32 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     ctx.quadraticCurveTo(-25, 35 - wingY, -42, 18 - wingY * 0.7);
     ctx.quadraticCurveTo(-30, 8, -4, 4);
     ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
 
-    // Reverse indicator
+    // Reverse indicator with glow
     if (s.reversing) {
       ctx.globalAlpha = 0.6;
+      ctx.globalCompositeOperation = 'lighter';
       ctx.beginPath();
       ctx.moveTo(50, 0);
       ctx.lineTo(38, -8);
       ctx.lineTo(38, 8);
       ctx.closePath();
       ctx.fillStyle = COLORS.cyan;
+      ctx.shadowColor = COLORS.cyan;
+      ctx.shadowBlur = 15;
       ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
     }
 
     ctx.restore();
 
-    // Particles
+    // Particles (additive blending for bright particles)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -484,39 +564,63 @@ export default function GameReverseFlight({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
+
+    // Bloom post-processing (subtle)
+    juice.applyBloom(ctx, w, h, 0.08);
 
     // --- HUD ---
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
-
-    // Timer text
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
-
-    // Distance score
-    ctx.font = 'bold 36px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.white;
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 8;
-    ctx.fillText(`${Math.floor(s.distance)}m`, w / 2, 50);
-    ctx.shadowBlur = 0;
-
-    // Lives (hearts)
-    ctx.font = '22px sans-serif';
-    ctx.textAlign = 'left';
-    for (let i = 0; i < MAX_LIVES; i++) {
-      ctx.fillStyle = i < s.lives ? COLORS.red : 'rgba(255,255,255,0.2)';
-      ctx.fillText('\u2665', 20 + i * 28, 40);
+    // Timer bar glow
+    if (s.timeLeft < 5) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.3 + Math.sin(elapsed * 8) * 0.2;
+      ctx.fillStyle = COLORS.red;
+      ctx.fillRect(0, 0, w * timerFrac, 6);
+      ctx.restore();
     }
 
-    // Energy bar
+    // Timer text (neon)
+    const timerTextColor = s.timeLeft < 5 ? COLORS.red : COLORS.white;
+    ctx.save();
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = timerColor;
+    ctx.shadowBlur = s.timeLeft < 5 ? 15 : 6;
+    ctx.fillStyle = timerTextColor;
+    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Distance score (neon text)
+    juice.drawNeonText(ctx, `${Math.floor(s.distance)}m`, w / 2, 42, COLORS.white, 36);
+
+    // Lives (hearts) with glow on loss
+    ctx.font = `22px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    for (let i = 0; i < MAX_LIVES; i++) {
+      if (i < s.lives) {
+        ctx.shadowColor = COLORS.red;
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = COLORS.red;
+      } else {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      }
+      ctx.fillText('\u2665', 20 + i * 28, 40);
+    }
+    ctx.shadowBlur = 0;
+
+    // Energy bar with glow
     const barX = 20;
     const barY = 56;
     const barW = 120;
@@ -524,14 +628,32 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(barX, barY, barW, barH);
     const energyFrac = s.energy / ENERGY_MAX;
-    ctx.fillStyle = energyFrac < 0.25 ? COLORS.red : COLORS.cyan;
+    const energyColor = energyFrac < 0.25 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = energyColor;
     ctx.fillRect(barX, barY, barW * energyFrac, barH);
-    ctx.font = '10px sans-serif';
+
+    // Energy bar additive glow
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = energyColor;
+    ctx.fillRect(barX, barY - 1, barW * energyFrac, barH + 2);
+    ctx.restore();
+
+    // Energy label (neon)
+    ctx.save();
+    ctx.font = `bold 10px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = energyColor;
+    ctx.shadowBlur = 6;
     ctx.fillStyle = COLORS.white;
     ctx.fillText('ENERGY', barX, barY + barH + 12);
+    ctx.shadowBlur = 0;
+    ctx.restore();
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+  }, [phase, sounds, spawnParticles, haptics, juice]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -550,6 +672,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
       s.hitCooldown = 0;
       s.flashAlpha = 0;
       s.scrollX = 0;
+      s.trailPoints = [];
       for (const o of s.obstacles) o.active = false;
       for (const f of s.flowers) f.active = false;
       for (const p of s.particles) p.active = false;
@@ -572,34 +695,84 @@ export default function GameReverseFlight({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>Results</div>
-          <div style={{ color: COLORS.mint, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
+            textShadow: `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`,
+          }}>Results</div>
+          <div style={{
+            color: COLORS.mint, fontSize: 20, marginBottom: 8,
+            textShadow: `0 0 12px ${COLORS.mint}`,
+          }}>
             Distance: {displayScore}m
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 16, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.cyan, fontSize: 16, marginBottom: 4,
+            textShadow: `0 0 10px ${COLORS.cyan}`,
+          }}>
             Lives: {state.current.lives}/{MAX_LIVES}
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4,
+            textShadow: `0 0 30px ${COLORS.gold}, 0 0 60px ${COLORS.gold}60`,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>score</div>
-          <button onClick={() => onComplete(displayScore)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <div style={{
+            color: COLORS.gray, fontSize: 14, marginBottom: 24,
+            textShadow: `0 0 8px ${COLORS.gray}80`,
+          }}>score</div>
+          <button onClick={() => {
+            haptics.tapFeedback();
+            sounds.pop();
+            onComplete(displayScore);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+            color: COLORS.primary,
+            border: 'none',
+            padding: '14px 40px',
+            borderRadius: 12,
+            fontSize: 18,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.cyan}60, 0 0 40px ${COLORS.cyan}30`,
+            textShadow: 'none',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+          <button onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.08)',
+            color: COLORS.gray,
+            border: `1px solid ${COLORS.gray}60`,
+            padding: '10px 30px',
+            borderRadius: 12,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            textShadow: `0 0 8px ${COLORS.gray}40`,
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>

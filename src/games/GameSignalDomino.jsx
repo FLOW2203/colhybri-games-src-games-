@@ -2,12 +2,15 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 30;
 const PELICAN_COUNT = 6;
 const TAP_WINDOW = 200;
 const POOL_SIZE = 100;
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 export default function GameSignalDomino({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -15,6 +18,8 @@ export default function GameSignalDomino({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -100,7 +105,10 @@ export default function GameSignalDomino({ onComplete, onBack }) {
     spawnSplash(pel.x, pel.y + 40, 8);
     spawnRipple(pel.x, pel.y + 45);
     sounds.splash();
-  }, [sounds, spawnSplash, spawnRipple]);
+    haptics.tapFeedback();
+    juice.shake(4, 0.15);
+    juice.flash('#00D4FF', 0.2);
+  }, [sounds, haptics, juice, spawnSplash, spawnRipple]);
 
   const startWave = useCallback(() => {
     const s = state.current;
@@ -123,11 +131,17 @@ export default function GameSignalDomino({ onComplete, onBack }) {
     s.autoStrikeTime = performance.now() + delay;
     s.waitingForTap = true;
     s.tapDeadline = performance.now() + delay + TAP_WINDOW;
-  }, [strikePelican]);
+
+    sounds.whoosh();
+  }, [strikePelican, sounds]);
 
   const handleTap = useCallback(() => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        sounds.countdown(true);
+        haptics.tapFeedback();
+      }
       return;
     }
     const s = state.current;
@@ -161,14 +175,20 @@ export default function GameSignalDomino({ onComplete, onBack }) {
         s.waveCooldown = 1.0;
         setDisplayScore(s.score);
         sounds.chime();
+        sounds.success();
+        haptics.successFeedback();
+        juice.shake(6, 0.25);
+        juice.flash('#2EEAA3', 0.4);
       } else {
         // Set up next pelican
         const delay = Math.max(150, 500 / s.waveSpeed);
         s.autoStrikeTime = now + delay;
         s.tapDeadline = now + delay + TAP_WINDOW;
+        sounds.combo(s.currentPelican);
+        haptics.comboFeedback(1);
       }
     }
-  }, [phase, sounds, strikePelican]);
+  }, [phase, sounds, haptics, juice, strikePelican]);
 
   useTouch(canvasRef, { onTap: handleTap });
 
@@ -187,6 +207,9 @@ export default function GameSignalDomino({ onComplete, onBack }) {
     const ctx = canvas.getContext('2d');
     ctx.save();
     ctx.scale(dpr, dpr);
+
+    // Apply juice shake
+    juice.applyShake(ctx);
 
     const s = state.current;
     const cx = w / 2;
@@ -216,23 +239,27 @@ export default function GameSignalDomino({ onComplete, onBack }) {
         drawPelicanSilhouette(ctx, s.pelicans[i].x, s.pelicans[i].y, false, 0, elapsed + s.pelicans[i].bobOffset);
       }
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Signal Domino', cx, cy - 100, COLORS.cyan, 28);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Signal Domino', cx, cy - 100);
-      ctx.font = '18px sans-serif';
+      ctx.shadowColor = COLORS.cyan;
+      ctx.shadowBlur = 8;
       ctx.fillStyle = COLORS.cyan;
       ctx.fillText('When one pelican strikes,', cx, cy - 60);
       ctx.fillText('all strike in sequence!', cx, cy - 36);
-      ctx.font = '16px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Tap to trigger each pelican in time', cx, cy + 80);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 130);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 130, COLORS.mint, 20);
       ctx.globalAlpha = 1;
+
       ctx.restore();
       return;
     }
@@ -240,6 +267,12 @@ export default function GameSignalDomino({ onComplete, onBack }) {
     // Update time
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     s.waterOffset = elapsed * 0.5;
+
+    // Warning haptic when low time
+    if (s.timeLeft <= 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.tick();
+    }
 
     // Check for missed tap
     if (s.waveActive && s.waitingForTap) {
@@ -254,6 +287,10 @@ export default function GameSignalDomino({ onComplete, onBack }) {
         s.missFlash = 0.3;
         s.waveCooldown = 1.2;
         setDisplayScore(s.score);
+        sounds.fail();
+        haptics.failFeedback();
+        juice.shake(10, 0.35);
+        juice.flash('#EF4444', 0.5);
       }
     }
 
@@ -295,10 +332,15 @@ export default function GameSignalDomino({ onComplete, onBack }) {
       if (r.life <= 0) r.active = false;
     }
 
+    // Update juice
+    juice.update(delta);
+
     // Game over
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
       setDisplayScore(s.score);
+      sounds.success();
+      haptics.heavyFeedback();
       return;
     }
 
@@ -334,11 +376,14 @@ export default function GameSignalDomino({ onComplete, onBack }) {
     ctx.fillStyle = 'rgba(100,180,255,0.15)';
     ctx.fill();
 
-    // Miss flash
+    // Miss flash (kept from original + juice flash overlay)
     if (s.missFlash > 0) {
       ctx.fillStyle = `rgba(239,68,68,${s.missFlash * 0.4})`;
       ctx.fillRect(0, 0, w, h);
     }
+
+    // Juice screen flash overlay
+    juice.drawFlash(ctx, w, h);
 
     // Water ripples
     for (const r of s.waterRipples) {
@@ -356,18 +401,28 @@ export default function GameSignalDomino({ onComplete, onBack }) {
       const pel = s.pelicans[i];
       drawPelicanSilhouette(ctx, pel.x, pel.y, pel.struck, pel.flashAlpha, elapsed + pel.bobOffset);
 
+      // Glow effect on struck pelicans (additive blending)
+      if (pel.struck) {
+        juice.drawGlow(ctx, pel.x, pel.y, 50, COLORS.cyan, 0.25);
+      }
+
       // Flash effect
       if (pel.flashAlpha > 0.1) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
         const flashGrad = ctx.createRadialGradient(pel.x, pel.y, 0, pel.x, pel.y, 60);
         flashGrad.addColorStop(0, `rgba(255,255,255,${pel.flashAlpha * 0.5})`);
         flashGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = flashGrad;
         ctx.fillRect(pel.x - 60, pel.y - 60, 120, 120);
+        ctx.restore();
       }
 
-      // Index indicator
+      // Index indicator with glow
       if (s.waveActive && s.waitingForTap && i === s.currentPelican) {
         const indAlpha = 0.5 + Math.sin(elapsed * 10) * 0.5;
+        // Outer glow
+        juice.drawGlow(ctx, pel.x, pel.y - 50, 20, COLORS.mint, indAlpha * 0.5);
         ctx.beginPath();
         ctx.arc(pel.x, pel.y - 50, 8, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(46,234,163,${indAlpha})`;
@@ -375,7 +430,9 @@ export default function GameSignalDomino({ onComplete, onBack }) {
       }
     }
 
-    // Splash particles
+    // Splash particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.splashParticles) {
       if (!p.active) continue;
       ctx.beginPath();
@@ -383,9 +440,12 @@ export default function GameSignalDomino({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(150,200,255,${p.alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
-    // Connection line during wave
+    // Connection line during wave with additive blending
     if (s.waveActive) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
       for (let i = 0; i < s.currentPelican && i < PELICAN_COUNT - 1; i++) {
         const p1 = s.pelicans[i];
         const p2 = s.pelicans[i + 1];
@@ -393,48 +453,60 @@ export default function GameSignalDomino({ onComplete, onBack }) {
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
-          ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+          ctx.strokeStyle = 'rgba(0,212,255,0.4)';
           ctx.lineWidth = 2;
+          ctx.shadowColor = COLORS.cyan;
+          ctx.shadowBlur = 10;
           ctx.stroke();
+          ctx.shadowBlur = 0;
         }
       }
+      ctx.restore();
     }
 
-    // Feedback
+    // Feedback with neon text
     if (s.feedbackTimer > 0) {
       const alpha = Math.min(1, s.feedbackTimer * 2);
       ctx.globalAlpha = alpha;
-      ctx.font = 'bold 30px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = s.feedbackText.includes('broken') ? COLORS.red : COLORS.mint;
-      ctx.fillText(s.feedbackText, cx, cy - 80);
+      const fbColor = s.feedbackText.includes('broken') ? COLORS.red : COLORS.mint;
+      juice.drawNeonText(ctx, s.feedbackText, cx, cy - 80, fbColor, 30);
       ctx.globalAlpha = 1;
     }
 
-    // Wave counter
-    ctx.font = '16px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.gray;
-    ctx.fillText(`Wave ${s.completedWaves} | Speed x${s.waveSpeed.toFixed(1)}`, cx, h - 30);
+    // Wave counter with neon style
+    juice.drawNeonText(ctx, `Wave ${s.completedWaves} | Speed x${s.waveSpeed.toFixed(1)}`, cx, h - 30, COLORS.gray, 16);
 
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
+    // Glow on the timer bar edge
+    if (timerFrac > 0) {
+      juice.drawGlow(ctx, w * timerFrac, 2, 15, timerColor, 0.6);
+    }
 
-    // Timer + score
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Timer + score with neon text
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, s.timeLeft < 5 ? COLORS.red : COLORS.white, 24);
+
+    ctx.save();
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 12;
     ctx.fillStyle = COLORS.white;
     ctx.fillText(`Score: ${s.score}`, 20, 40);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Bloom post-processing pass
+    juice.applyBloom(ctx, w, h, 0.08);
 
     ctx.restore();
-  }, [phase, sounds, startWave, spawnSplash, spawnRipple]));
+  }, [phase, sounds, haptics, juice, startWave, spawnSplash, spawnRipple]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -472,31 +544,88 @@ export default function GameSignalDomino({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 12 }}>Time's Up!</div>
-          <div style={{ color: COLORS.cyan, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{displayScore}</div>
-          <div style={{ color: COLORS.gray, fontSize: 16, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white,
+            fontSize: 28,
+            fontWeight: 'bold',
+            marginBottom: 12,
+            textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}80`,
+          }}>Time's Up!</div>
+          <div style={{
+            color: COLORS.cyan,
+            fontSize: 48,
+            fontWeight: 'bold',
+            marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}, 0 0 60px ${COLORS.cyan}80`,
+          }}>{displayScore}</div>
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 16,
+            marginBottom: 4,
+            textShadow: `0 0 8px ${COLORS.gray}60`,
+          }}>
             {state.current.completedWaves} waves completed
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 14,
+            marginBottom: 24,
+            textShadow: `0 0 8px ${COLORS.gray}60`,
+          }}>
             Pelicans synchronize perfectly!
           </div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <button onClick={() => {
+            sounds.chime();
+            haptics.tapFeedback();
+            onComplete(state.current.score);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+            color: COLORS.primary,
+            border: 'none',
+            padding: '14px 40px',
+            borderRadius: 12,
+            fontSize: 18,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.cyan}80, 0 0 40px ${COLORS.cyan}40`,
+            textShadow: 'none',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+          <button onClick={() => {
+            sounds.tick();
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.05)',
+            color: COLORS.gray,
+            border: `1px solid ${COLORS.gray}60`,
+            padding: '10px 30px',
+            borderRadius: 12,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            textShadow: `0 0 8px ${COLORS.gray}40`,
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
-          fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontSize: 14, cursor: 'pointer', zIndex: 10, fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>

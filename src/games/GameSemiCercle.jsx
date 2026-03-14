@@ -2,12 +2,15 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 45;
 const POOL_SIZE = 120;
 const NUM_PELICANS = 5;
 const NUM_FISH = 8;
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 export default function GameSemiCercle({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -16,6 +19,8 @@ export default function GameSemiCercle({ onComplete, onBack }) {
   const [displayTime, setDisplayTime] = useState(GAME_DURATION);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     score: 0,
@@ -47,6 +52,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       r: 0, g: 0, b: 0, size: 0,
     })),
     waveOffset: 0,
+    lastWarningTick: -1,
   });
 
   const spawnParticles = useCallback((cx, cy, count, r, g, b) => {
@@ -115,7 +121,12 @@ export default function GameSemiCercle({ onComplete, onBack }) {
   }
 
   const handleTap = useCallback(({ x, y }) => {
-    if (phase === 'ready') { setPhase('playing'); return; }
+    if (phase === 'ready') {
+      setPhase('playing');
+      sounds.countdown(true);
+      haptics.tapFeedback();
+      return;
+    }
     if (phase !== 'playing') return;
     const s = state.current;
 
@@ -128,6 +139,10 @@ export default function GameSemiCercle({ onComplete, onBack }) {
         p.diveTimer = 0;
       }
       sounds.splash();
+      sounds.whoosh();
+      haptics.impactFeedback();
+      juice.shake(6, 0.3);
+      juice.flash('#1E90FF', 0.3);
       return;
     }
 
@@ -138,7 +153,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       for (let i = 0; i < catchCount && i < fishInRange.length; i++) {
         fishInRange[i].caught = true;
         s.fishCaught++;
-        spawnParticles(fishInRange[i].x, fishInRange[i].y, 5, 0, 191, 255);
+        spawnParticles(fishInRange[i].x, fishInRange[i].y, 8, 0, 191, 255);
       }
       const pts = Math.floor(catchCount * (s.formationAccuracy / 100) * 5);
       s.score += pts;
@@ -147,9 +162,21 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       s.diveResultTimer = 1.5;
       s.divePhase = 'surfacing';
       for (const p of s.pelicans) p.diveState = 'surfacing';
-      sounds.chime();
+
+      if (catchCount > 0) {
+        sounds.chime();
+        sounds.pop();
+        haptics.successFeedback();
+        juice.flash('#2EEAA3', 0.35);
+        juice.shake(4, 0.2);
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#EF4444', 0.3);
+        juice.shake(10, 0.4);
+      }
     }
-  }, [phase, sounds, spawnParticles]);
+  }, [phase, sounds, spawnParticles, haptics, juice]);
 
   const handleDrag = useCallback(({ x, y, dx, dy }) => {
     if (phase !== 'playing') return;
@@ -172,9 +199,11 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       if (nearest >= 0) {
         s.dragIdx = nearest;
         s.pelicans[nearest].dragging = true;
+        haptics.tapFeedback();
+        sounds.tick();
       }
     }
-  }, [phase]);
+  }, [phase, haptics, sounds]);
 
   const handleSwipe = useCallback(() => {
     if (phase === 'ready') setPhase('playing');
@@ -271,30 +300,54 @@ export default function GameSemiCercle({ onComplete, onBack }) {
     const s = state.current;
     const cx = w / 2;
 
+    // Update juice effects
+    juice.update(delta);
+
     if (phase === 'ready') {
       ctx.fillStyle = '#0A1628';
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+
+      // Neon title
+      juice.drawNeonText(ctx, 'Semi-Cercle', w / 2, h / 2 - 70, COLORS.cyan, 28);
+
+      // Subtitle with glow
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Semi-Cercle', w / 2, h / 2 - 70);
-      ctx.font = '16px sans-serif';
+      ctx.shadowColor = COLORS.mint;
+      ctx.shadowBlur = 10;
       ctx.fillStyle = COLORS.mint;
       ctx.fillText('Pelicans form semi-circles and', w / 2, h / 2 - 20);
       ctx.fillText('synchronize their catches!', w / 2, h / 2 + 4);
-      ctx.font = '14px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `14px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('DRAG pelicans into formation', w / 2, h / 2 + 44);
       ctx.fillText('TAP to trigger synchronized dive', w / 2, h / 2 + 66);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillText('TAP TO START', w / 2, h / 2 + 120);
+
+      // Pulsing start text with neon
+      const pulse = 0.6 + 0.4 * Math.sin(elapsed * 3);
+      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.mint, 20);
+      ctx.globalAlpha = pulse;
+      juice.drawGlow(ctx, w / 2, h / 2 + 120, 80, COLORS.mint, 0.2);
+      ctx.globalAlpha = 1;
+
       ctx.restore();
       return;
     }
 
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     setDisplayTime(Math.ceil(s.timeLeft));
+
+    // Low time warning haptics
+    if (s.timeLeft <= 5 && s.timeLeft > 0) {
+      const sec = Math.ceil(s.timeLeft);
+      if (sec !== s.lastWarningTick) {
+        s.lastWarningTick = sec;
+        haptics.warningFeedback();
+        sounds.tick();
+      }
+    }
 
     // Init first round fish
     if (s.fish.length === 0) {
@@ -334,6 +387,10 @@ export default function GameSemiCercle({ onComplete, onBack }) {
         s.diveResultTimer = 1;
         s.divePhase = 'surfacing';
         for (const p of s.pelicans) p.diveState = 'surfacing';
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#EF4444', 0.25);
+        juice.shake(8, 0.35);
       }
     }
 
@@ -350,6 +407,8 @@ export default function GameSemiCercle({ onComplete, onBack }) {
         s.round++;
         s.fishSpeed += 15;
         resetFormation(s, w, h);
+        sounds.powerup();
+        haptics.comboFeedback(s.round);
       }
     }
 
@@ -377,8 +436,18 @@ export default function GameSemiCercle({ onComplete, onBack }) {
     // Game over
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
+      if (s.score > 0) {
+        sounds.success();
+        haptics.successFeedback();
+      } else {
+        sounds.fail();
+        haptics.heavyFeedback();
+      }
       return;
     }
+
+    // Apply shake transform
+    juice.applyShake(ctx);
 
     // --- RENDER ---
     // Sky
@@ -410,9 +479,10 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       ctx.stroke();
     }
 
-    // Fish shadows (below surface)
+    // Fish shadows (below surface) with subtle glow
     for (const f of s.fish) {
       if (f.caught) continue;
+      juice.drawGlow(ctx, f.x, f.y, f.size * 2, '#00BFFF', 0.12);
       drawFish(ctx, f, elapsed);
     }
 
@@ -433,30 +503,48 @@ export default function GameSemiCercle({ onComplete, onBack }) {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Pelicans
+    // Pelicans with glow
     for (let i = 0; i < NUM_PELICANS; i++) {
       const p = s.pelicans[i];
       const py = p.y + p.diveY;
-      drawPelican(ctx, p.x, py, p.diveState === 'diving', elapsed);
+
+      // Glow behind pelican
       if (p.dragging) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        juice.drawGlow(ctx, p.x, py, 35, COLORS.cyan, 0.35);
+      } else if (s.divePhase === 'ready') {
+        juice.drawGlow(ctx, p.x, py, 28, COLORS.mint, 0.15 + 0.1 * Math.sin(elapsed * 4));
+      }
+
+      drawPelican(ctx, p.x, py, p.diveState === 'diving', elapsed);
+
+      if (p.dragging) {
+        ctx.strokeStyle = 'rgba(0,212,255,0.6)';
         ctx.lineWidth = 2;
+        ctx.shadowColor = COLORS.cyan;
+        ctx.shadowBlur = 12;
         ctx.beginPath();
         ctx.arc(p.x, py, 22, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.shadowBlur = 0;
       }
     }
 
-    // Splash effects during dive
+    // Splash effects during dive with additive blending
     if (s.divePhase === 'diving' || s.divePhase === 'timing') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
       for (const p of s.pelicans) {
         if (p.diveY > 30) {
           spawnParticles(p.x, s.waterLevel, 1, 150, 220, 255);
+          juice.drawGlow(ctx, p.x, s.waterLevel, 30, '#00BFFF', 0.25);
         }
       }
+      ctx.restore();
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -465,33 +553,40 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
-    // Formation accuracy meter
+    // Formation accuracy meter with glow
     const meterW = w * 0.4;
     const meterH = 10;
     const meterX = (w - meterW) / 2;
     const meterY = 65;
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(meterX, meterY, meterW, meterH);
-    ctx.fillStyle = s.formationAccuracy >= 80 ? '#22C55E' : s.formationAccuracy >= 50 ? '#F5A623' : '#EF4444';
+    const meterColor = s.formationAccuracy >= 80 ? '#22C55E' : s.formationAccuracy >= 50 ? '#F5A623' : '#EF4444';
+    ctx.fillStyle = meterColor;
     ctx.fillRect(meterX, meterY, meterW * (s.formationAccuracy / 100), meterH);
+
+    // Meter glow when full
+    if (s.formationAccuracy >= 80) {
+      juice.drawGlow(ctx, w / 2, meterY + meterH / 2, meterW * 0.3, '#22C55E', 0.15);
+    }
+
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 1;
     ctx.strokeRect(meterX, meterY, meterW, meterH);
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = COLORS.white;
     ctx.fillText(`Formation: ${Math.floor(s.formationAccuracy)}%`, w / 2, meterY - 4);
 
-    // Dive ready indicator
+    // Dive ready indicator - neon
     if (s.divePhase === 'ready') {
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(34,197,94,${0.6 + 0.4 * Math.sin(elapsed * 4)})`;
-      ctx.fillText('TAP TO DIVE!', w / 2, s.waterLevel - 100);
+      const glowPulse = 0.6 + 0.4 * Math.sin(elapsed * 4);
+      juice.drawNeonText(ctx, 'TAP TO DIVE!', w / 2, s.waterLevel - 100, '#22C55E', 18);
+      juice.drawGlow(ctx, w / 2, s.waterLevel - 100, 60, '#22C55E', 0.15 * glowPulse);
     }
 
-    // Timing bar
+    // Timing bar with glow
     if (s.divePhase === 'timing') {
       const barW = w * 0.6;
       const barH = 20;
@@ -499,46 +594,63 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       const barY = h * 0.4;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(barX, barY, barW, barH);
-      // Sweet spot
+      // Sweet spot with glow
       ctx.fillStyle = 'rgba(34,197,94,0.4)';
       ctx.fillRect(barX + barW * 0.35, barY, barW * 0.3, barH);
-      // Cursor
+      juice.drawGlow(ctx, barX + barW * 0.5, barY + barH / 2, barW * 0.15, '#22C55E', 0.2);
+      // Cursor with glow
       const cursorX = barX + barW * s.diveTimingWindow;
       ctx.fillStyle = '#FFE066';
+      ctx.shadowColor = '#FFE066';
+      ctx.shadowBlur = 10;
       ctx.fillRect(cursorX - 2, barY - 3, 4, barH + 6);
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillStyle = COLORS.white;
-      ctx.fillText('TAP NOW!', w / 2, barY - 8);
+      ctx.shadowBlur = 0;
+      juice.drawNeonText(ctx, 'TAP NOW!', w / 2, barY - 12, '#FFE066', 14);
     }
 
-    // Dive result
+    // Dive result - neon text
     if (s.diveResultTimer > 0) {
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.globalAlpha = Math.min(1, s.diveResultTimer);
-      ctx.fillStyle = s.diveTimingResult.includes('Caught') ? COLORS.mint : COLORS.red;
-      ctx.fillText(s.diveTimingResult, w / 2, h * 0.35);
+      const resultAlpha = Math.min(1, s.diveResultTimer);
+      ctx.globalAlpha = resultAlpha;
+      const resultColor = s.diveTimingResult.includes('Caught') ? COLORS.mint : COLORS.red;
+      juice.drawNeonText(ctx, s.diveTimingResult, w / 2, h * 0.35, resultColor, 24);
       ctx.globalAlpha = 1;
     }
 
-    // Round
-    ctx.font = '14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.gray;
-    ctx.fillText(`Round ${s.round}`, w / 2, 90);
+    // Round - neon
+    juice.drawNeonText(ctx, `Round ${s.round}`, w / 2, 90, COLORS.cyan, 14);
 
-    // Score & timer
-    ctx.font = 'bold 22px sans-serif';
+    // Score - neon text
     ctx.textAlign = 'left';
+    ctx.save();
+    ctx.font = `bold 22px ${FONT_FAMILY}`;
+    ctx.shadowColor = COLORS.mint;
+    ctx.shadowBlur = 12;
     ctx.fillStyle = COLORS.white;
     ctx.fillText(`Score: ${s.score}`, 20, 40);
-    ctx.font = 'bold 24px sans-serif';
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Timer - neon with warning glow
+    ctx.save();
     ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.white;
+    ctx.shadowColor = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    ctx.shadowBlur = s.timeLeft < 5 ? 16 : 8;
+    ctx.fillStyle = timerColor;
     ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Draw screen flash overlay
+    juice.drawFlash(ctx, w, h);
+
+    // Subtle bloom
+    juice.applyBloom(ctx, w, h, 0.08);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+  }, [phase, sounds, spawnParticles, haptics, juice]));
 
   useEffect(() => { if (phase === 'ready') gameLoop.start(); }, [phase, gameLoop]);
 
@@ -547,7 +659,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       const s = state.current;
       s.score = 0; s.round = 1; s.fishCaught = 0; s.fishSpeed = 40;
       s.divePhase = 'none'; s.diveResultTimer = 0; s.dragIdx = -1;
-      s.fish = [];
+      s.fish = []; s.lastWarningTick = -1;
       gameLoop.reset(); gameLoop.start();
     }
   }, [phase, gameLoop]);
@@ -562,31 +674,71 @@ export default function GameSemiCercle({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(10,15,28,0.75)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 30, fontWeight: 'bold', marginBottom: 8 }}>Fishing Over!</div>
-          <div style={{ color: COLORS.mint, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{state.current.score}</div>
-          <div style={{ color: COLORS.gray, fontSize: 15, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 30, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}`,
+          }}>Fishing Over!</div>
+          <div style={{
+            color: COLORS.mint, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 24px ${COLORS.mint}, 0 0 48px ${COLORS.mint}`,
+          }}>{state.current.score}</div>
+          <div style={{
+            color: COLORS.gray, fontSize: 15, marginBottom: 4,
+            textShadow: '0 0 8px rgba(156,163,175,0.4)',
+          }}>
             Fish caught: {state.current.fishCaught} | Rounds: {state.current.round}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 13, marginBottom: 24 }}>
+          <div style={{
+            color: COLORS.gray, fontSize: 13, marginBottom: 24,
+            textShadow: '0 0 6px rgba(156,163,175,0.3)',
+          }}>
             Synchronized teamwork is key!
           </div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.mint, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <button onClick={() => {
+            sounds.chime();
+            haptics.tapFeedback();
+            onComplete(state.current.score);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.mint}, ${COLORS.cyan})`,
+            color: COLORS.primary, border: 'none',
+            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
+            cursor: 'pointer', marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.mint}80, 0 4px 15px rgba(0,0,0,0.3)`,
+            textShadow: 'none',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+          <button onClick={() => {
+            sounds.tick();
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.08)',
+            color: COLORS.gray, border: `1px solid ${COLORS.gray}50`,
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+            textShadow: '0 0 8px rgba(156,163,175,0.3)',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>
