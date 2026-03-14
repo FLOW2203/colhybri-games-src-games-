@@ -2,8 +2,11 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 const GAME_DURATION = 60;
 const POOL_SIZE = 100;
 const INITIAL_GRID = 3;
@@ -29,6 +32,8 @@ export default function GameSuperBrain({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -58,6 +63,8 @@ export default function GameSuperBrain({ onComplete, onBack }) {
     })),
     glowAlpha: 0,
     glowIdx: -1,
+    screenFlashAlpha: 0,
+    screenFlashColor: '#FFFFFF',
   });
 
   const getFlowerPositions = useCallback((gridSize, w, h) => {
@@ -126,7 +133,11 @@ export default function GameSuperBrain({ onComplete, onBack }) {
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        sounds.whoosh();
+        haptics.tapFeedback();
+      }
       return;
     }
     const s = state.current;
@@ -163,6 +174,8 @@ export default function GameSuperBrain({ onComplete, onBack }) {
       s.playerInput.push(tappedIdx);
       s.flashCells.push({ idx: tappedIdx, alpha: 1.0, correct: true });
       sounds.tick();
+      haptics.tapFeedback();
+      sounds.wingflap();
       spawnParticles(flower.x, flower.y, 5, [[34, 197, 94], [46, 234, 163], [255, 255, 255]]);
 
       if (s.playerInput.length === s.sequence.length) {
@@ -175,10 +188,14 @@ export default function GameSuperBrain({ onComplete, onBack }) {
         s.seqLength++;
         if (s.roundsCompleted % 3 === 0 && s.gridSize < MAX_GRID) {
           s.gridSize++;
+          sounds.powerup();
         }
         s.roundPhase = 'correct';
         s.phaseTimer = 0;
         sounds.chime();
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#22C55E', 0.4);
         spawnParticles(flower.x, flower.y, 15, [[46, 234, 163], [0, 212, 255], [245, 166, 35]]);
       }
     } else {
@@ -190,15 +207,21 @@ export default function GameSuperBrain({ onComplete, onBack }) {
       s.roundPhase = 'wrong';
       s.phaseTimer = 0;
       sounds.firecrackle();
+      sounds.fail();
+      haptics.failFeedback();
+      juice.shake(12, 0.4);
+      juice.flash('#EF4444', 0.5);
       spawnParticles(flower.x, flower.y, 8, [[239, 68, 68], [255, 100, 100], [200, 50, 50]]);
 
       if (s.lives <= 0) {
+        haptics.heavyFeedback();
+        sounds.impact();
         setPhase('ended');
         setDisplayScore(s.score);
         return;
       }
     }
-  }, [phase, sounds, spawnParticles, getFlowerPositions]);
+  }, [phase, sounds, haptics, juice, spawnParticles, getFlowerPositions]);
 
   useTouch(canvasRef, { onTap: handleTap });
 
@@ -222,6 +245,9 @@ export default function GameSuperBrain({ onComplete, onBack }) {
     const cx = w / 2;
     const cy = h / 2;
 
+    // Update juice effects
+    juice.update(delta);
+
     if (phase === 'ready') {
       const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
       skyGrad.addColorStop(0, '#1a2a4c');
@@ -230,29 +256,43 @@ export default function GameSuperBrain({ onComplete, onBack }) {
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Super Brain', cx, cy - 60, COLORS.cyan, 32);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Super Brain', cx, cy - 60);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.mint;
+      ctx.shadowColor = COLORS.mint;
+      ctx.shadowBlur = 8;
       ctx.fillText('Hummingbirds memorize', cx, cy - 10);
       ctx.fillText('hundreds of flower locations!', cx, cy + 16);
-      ctx.font = '16px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Watch the sequence, then repeat it!', cx, cy + 60);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing neon tap-to-start
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 110);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, COLORS.gold, 20);
       ctx.globalAlpha = 1;
+
+      // Subtle ambient glow in center
+      juice.drawGlow(ctx, cx, cy, 200, COLORS.cyan, 0.08 + Math.sin(elapsed * 2) * 0.04);
+
       ctx.restore();
       return;
     }
 
     // Update time
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
+
+    // Low time warning haptics
+    if (s.timeLeft <= 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.countdown(s.timeLeft <= 1);
+    }
 
     // Shake decay
     if (s.shakeTimer > 0) {
@@ -280,10 +320,12 @@ export default function GameSuperBrain({ onComplete, onBack }) {
           s.roundPhase = 'input';
           s.playerInput = [];
           s.showingIdx = -1;
+          sounds.whoosh();
         } else {
           s.glowIdx = s.sequence[s.showingIdx];
           s.glowAlpha = 1.0;
           sounds.tick();
+          haptics.tapFeedback();
         }
       }
       if (s.showingIdx >= 0 && s.showingIdx < s.sequence.length) {
@@ -326,6 +368,8 @@ export default function GameSuperBrain({ onComplete, onBack }) {
 
     // Game over by time
     if (s.timeLeft <= 0 && phase === 'playing') {
+      haptics.heavyFeedback();
+      sounds.impact();
       setPhase('ended');
       setDisplayScore(s.score);
       return;
@@ -346,6 +390,9 @@ export default function GameSuperBrain({ onComplete, onBack }) {
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
+    // Apply juice shake on top
+    juice.applyShake(ctx);
+
     // Get flower positions
     const flowers = getFlowerPositions(s.gridSize, w, h);
 
@@ -363,6 +410,19 @@ export default function GameSuperBrain({ onComplete, onBack }) {
       const [cr, cg, cb] = f.color;
       const isGlowing = s.glowIdx === i && s.glowAlpha > 0.05;
       const flashCell = s.flashCells.find(fc => fc.idx === i);
+
+      // Ambient glow around each flower (additive blending)
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.08 + Math.sin(elapsed * 1.5 + i * 0.7) * 0.04;
+      const ambGrad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.radius * 1.8);
+      ambGrad.addColorStop(0, `rgba(${cr},${cg},${cb},0.4)`);
+      ambGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = ambGrad;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.radius * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
 
       // Flower shadow
       ctx.beginPath();
@@ -391,8 +451,11 @@ export default function GameSuperBrain({ onComplete, onBack }) {
       ctx.fillStyle = cGrad;
       ctx.fill();
 
-      // Glow effect
+      // Glow effect (enhanced with juice.drawGlow)
       if (isGlowing) {
+        // Use juice glow with additive blending
+        juice.drawGlow(ctx, f.x, f.y, f.radius * 2.0, `rgb(${cr},${cg},${cb})`, s.glowAlpha * 0.6);
+
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.radius * 1.4, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${cr},${cg},${cb},${s.glowAlpha * 0.5})`;
@@ -410,8 +473,12 @@ export default function GameSuperBrain({ onComplete, onBack }) {
         ctx.arc(f.x, f.y, f.radius * 1.2, 0, Math.PI * 2);
         if (flashCell.correct) {
           ctx.fillStyle = `rgba(34,197,94,${flashCell.alpha * 0.6})`;
+          // Additive glow for correct
+          juice.drawGlow(ctx, f.x, f.y, f.radius * 2.5, '#22C55E', flashCell.alpha * 0.3);
         } else {
           ctx.fillStyle = `rgba(239,68,68,${flashCell.alpha * 0.6})`;
+          // Red glow for wrong
+          juice.drawGlow(ctx, f.x, f.y, f.radius * 2.5, '#EF4444', flashCell.alpha * 0.3);
         }
         ctx.fill();
       }
@@ -420,11 +487,14 @@ export default function GameSuperBrain({ onComplete, onBack }) {
       if (s.roundPhase === 'input') {
         const tapCount = s.playerInput.filter(idx => idx === i).length;
         if (tapCount > 0) {
-          ctx.font = `bold ${f.radius * 0.5}px sans-serif`;
+          ctx.font = `bold ${f.radius * 0.5}px ${FONT_FAMILY}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillStyle = 'rgba(255,255,255,0.7)';
+          ctx.shadowColor = '#FFFFFF';
+          ctx.shadowBlur = 6;
           ctx.fillText(tapCount.toString(), f.x, f.y);
+          ctx.shadowBlur = 0;
         }
       }
     }
@@ -436,6 +506,19 @@ export default function GameSuperBrain({ onComplete, onBack }) {
     ctx.translate(bx, by);
     const birdScale = 0.6;
     ctx.scale(birdScale, birdScale);
+
+    // Bird glow (additive)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.15 + Math.sin(elapsed * 3) * 0.05;
+    const birdGlowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 50);
+    birdGlowGrad.addColorStop(0, '#2EEAA3');
+    birdGlowGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = birdGlowGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, 50, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
     // Body
     ctx.beginPath();
@@ -485,7 +568,9 @@ export default function GameSuperBrain({ onComplete, onBack }) {
 
     ctx.restore();
 
-    // Particles
+    // Particles (additive blending for bright particles)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -503,80 +588,91 @@ export default function GameSuperBrain({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
 
     ctx.restore(); // undo shake
+
+    // --- Screen flash overlay from juice ---
+    juice.drawFlash(ctx, w, h);
 
     // --- HUD ---
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
 
-    // Timer text
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Timer bar glow
+    if (s.timeLeft < 10) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.3 + Math.sin(elapsed * 6) * 0.15;
+      ctx.fillStyle = timerColor;
+      ctx.fillRect(0, 0, w * timerFrac, 6);
+      ctx.restore();
+    }
 
-    // Score
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 20, 40);
+    // Timer text (neon when low)
+    if (s.timeLeft < 5) {
+      juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 20, 40, COLORS.red, 24);
+    } else {
+      ctx.font = `bold 24px ${FONT_FAMILY}`;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = COLORS.white;
+      ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    }
+
+    // Score (neon)
+    juice.drawNeonText(ctx, `Score: ${s.score}`, 80, 40, COLORS.cyan, 20);
 
     // Lives
-    ctx.font = '18px sans-serif';
+    ctx.font = `18px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.red;
+    ctx.shadowColor = COLORS.red;
+    ctx.shadowBlur = 8;
     let livesStr = '';
     for (let i = 0; i < LIVES_TOTAL; i++) {
       livesStr += i < s.lives ? '\u2665 ' : '\u2661 ';
     }
     ctx.fillText(livesStr, 20, 65);
+    ctx.shadowBlur = 0;
 
     // Round info
-    ctx.font = '14px sans-serif';
+    ctx.font = `14px ${FONT_FAMILY}`;
     ctx.fillStyle = COLORS.gray;
     ctx.textAlign = 'center';
     ctx.fillText(`Round ${s.roundsCompleted + 1} | Sequence: ${s.seqLength}`, cx, h - 30);
 
-    // Phase indicator
+    // Phase indicator (neon text)
     if (s.roundPhase === 'showing') {
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillStyle = COLORS.gold;
-      ctx.textAlign = 'center';
-      ctx.fillText('Watch the sequence...', cx, h * 0.16);
+      juice.drawNeonText(ctx, 'Watch the sequence...', cx, h * 0.16, COLORS.gold, 22);
     } else if (s.roundPhase === 'input') {
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillStyle = COLORS.mint;
-      ctx.textAlign = 'center';
-      ctx.fillText(`Tap: ${s.playerInput.length}/${s.sequence.length}`, cx, h * 0.16);
+      juice.drawNeonText(ctx, `Tap: ${s.playerInput.length}/${s.sequence.length}`, cx, h * 0.16, COLORS.mint, 22);
     } else if (s.roundPhase === 'correct') {
-      ctx.font = 'bold 26px sans-serif';
-      ctx.fillStyle = COLORS.green;
-      ctx.textAlign = 'center';
       const pulseScale = 1 + Math.sin(elapsed * 12) * 0.1;
       ctx.save();
       ctx.translate(cx, h * 0.16);
       ctx.scale(pulseScale, pulseScale);
-      ctx.fillText('Correct!', 0, 0);
+      juice.drawNeonText(ctx, 'Correct!', 0, 0, COLORS.green, 26);
       ctx.restore();
     } else if (s.roundPhase === 'wrong') {
-      ctx.font = 'bold 26px sans-serif';
-      ctx.fillStyle = COLORS.red;
-      ctx.textAlign = 'center';
-      ctx.fillText('Wrong! Watch again...', cx, h * 0.16);
+      juice.drawNeonText(ctx, 'Wrong! Watch again...', cx, h * 0.16, COLORS.red, 26);
     }
 
     // Grid size indicator
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.fillStyle = COLORS.gray;
     ctx.textAlign = 'right';
     ctx.fillText(`Grid: ${s.gridSize}x${s.gridSize}`, w - 20, 65);
 
+    // Subtle bloom overlay
+    juice.applyBloom(ctx, w, h, 0.06);
+
     ctx.restore();
-  }, [phase, sounds, spawnParticles, getFlowerPositions, startNewRound]));
+  }, [phase, sounds, haptics, juice, spawnParticles, getFlowerPositions, startNewRound]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -612,43 +708,102 @@ export default function GameSuperBrain({ onComplete, onBack }) {
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', fontFamily: FONT_FAMILY }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
       {phase === 'ended' && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>Results</div>
-          <div style={{ color: COLORS.mint, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
+            textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}`,
+            fontFamily: FONT_FAMILY,
+          }}>Results</div>
+          <div style={{
+            color: COLORS.mint, fontSize: 20, marginBottom: 8,
+            textShadow: `0 0 10px ${COLORS.mint}`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Rounds: {state.current.roundsCompleted}
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 16, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.cyan, fontSize: 16, marginBottom: 4,
+            textShadow: `0 0 8px ${COLORS.cyan}`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Max Sequence: {state.current.seqLength - 1}
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 16, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.gold, fontSize: 16, marginBottom: 4,
+            textShadow: `0 0 8px ${COLORS.gold}`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Grid Reached: {state.current.gridSize}x{state.current.gridSize}
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4,
+            textShadow: `0 0 20px ${COLORS.gold}, 0 0 40px ${COLORS.gold}, 0 0 60px ${COLORS.gold}`,
+            fontFamily: FONT_FAMILY,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <div style={{
+            color: COLORS.gray, fontSize: 14, marginBottom: 24,
+            fontFamily: FONT_FAMILY,
+          }}>points</div>
+          <button onClick={() => {
+            haptics.tapFeedback();
+            sounds.chime();
+            onComplete(state.current.score);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+            color: COLORS.primary,
+            border: 'none',
+            padding: '14px 40px',
+            borderRadius: 12,
+            fontSize: 18,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.cyan}80, 0 0 40px ${COLORS.cyan}40`,
+            textShadow: 'none',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+          <button onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.05)',
+            color: COLORS.gray,
+            border: `1px solid ${COLORS.gray}60`,
+            padding: '10px 30px',
+            borderRadius: 12,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            boxShadow: `0 0 10px rgba(255,255,255,0.05)`,
+            textShadow: `0 0 6px ${COLORS.gray}`,
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
         }}>Back</button>
       )}
     </div>

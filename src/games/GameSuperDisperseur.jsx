@@ -2,6 +2,8 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 30;
@@ -17,12 +19,16 @@ const SEED_GRAVITY = 280;
 const SPOT_SPAWN_INTERVAL = 0.8;
 const WIND_CHANGE_INTERVAL = 3;
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+
 export default function GameSuperDisperseur({ onComplete, onBack }) {
   const canvasRef = useRef(null);
   const [phase, setPhase] = useState('ready');
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -58,6 +64,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
     })),
     groundY: 0,
     flashAlpha: 0,
+    lastWarningSecond: -1,
   });
 
   const spawnParticles = useCallback((cx, cy, count, colors) => {
@@ -90,7 +97,11 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        sounds.countdown(true);
+        haptics.tapFeedback();
+      }
       return;
     }
     const s = state.current;
@@ -108,23 +119,26 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
         seed.landed = false;
         s.seedsLeft--;
         s.seedsDropped++;
-        sounds.tick();
+        sounds.drop();
+        haptics.tapFeedback();
         break;
       }
     }
-  }, [phase, sounds]);
+  }, [phase, sounds, haptics]);
 
   const handleSwipe = useCallback((direction) => {
     if (phase !== 'playing') return;
     const s = state.current;
     if (direction === 'up' && s.lane > 0) {
       s.lane--;
-      sounds.whoosh();
+      sounds.wingflap();
+      haptics.tapFeedback();
     } else if (direction === 'down' && s.lane < NUM_LANES - 1) {
       s.lane++;
-      sounds.whoosh();
+      sounds.wingflap();
+      haptics.tapFeedback();
     }
-  }, [phase, sounds]);
+  }, [phase, sounds, haptics]);
 
   useTouch(canvasRef, { onTap: handleTap, onSwipe: handleSwipe });
 
@@ -147,6 +161,9 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
     const s = state.current;
     s.groundY = h * 0.78;
 
+    // Update juice system
+    juice.update(delta);
+
     if (phase === 'ready') {
       const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
       skyGrad.addColorStop(0, '#2a7ab5');
@@ -157,23 +174,30 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
 
       const cx = w / 2;
       const cy = h / 2;
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+
+      // Neon title
+      juice.drawNeonText(ctx, 'Super Disperseur', cx, cy - 60, COLORS.mint, 28);
+
+      // Subtitle with glow
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Super Disperseur', cx, cy - 60);
-      ctx.font = '18px sans-serif';
+      ctx.shadowColor = COLORS.gold;
+      ctx.shadowBlur = 12;
       ctx.fillStyle = COLORS.gold;
       ctx.fillText('Toucans disperse seeds across the forest!', cx, cy - 10);
-      ctx.font = '16px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('TAP to drop seeds on fertile spots', cx, cy + 30);
       ctx.fillText('SWIPE UP/DOWN to change altitude', cx, cy + 55);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing "TAP TO START" with neon effect
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 110);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, COLORS.cyan, 20);
       ctx.globalAlpha = 1;
+
       ctx.restore();
       return;
     }
@@ -182,6 +206,16 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     s.scrollX += SCROLL_SPEED * delta;
     s.toucanBobT += delta * 4;
+
+    // Low time warning haptics
+    if (s.timeLeft <= 5 && s.timeLeft > 0) {
+      const currentSecond = Math.ceil(s.timeLeft);
+      if (currentSecond !== s.lastWarningSecond) {
+        s.lastWarningSecond = currentSecond;
+        haptics.warningFeedback();
+        sounds.countdown(false);
+      }
+    }
 
     // Toucan position
     const targetY = getLaneY(s.lane, h);
@@ -258,16 +292,21 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
                 break;
               }
             }
-            spawnParticles(seed.x, s.groundY, 8, [
+            spawnParticles(seed.x, s.groundY, 12, [
               [46, 234, 163], [34, 197, 94], [255, 220, 50],
             ]);
             sounds.chime();
+            haptics.impactFeedback();
+            juice.shake(spot.bonus ? 8 : 4, 0.2);
+            juice.flash(spot.bonus ? COLORS.gold : '#2EEAA3', spot.bonus ? 0.4 : 0.2);
             s.flashAlpha = 0.15;
             break;
           }
         }
         if (!hitSpot) {
           spawnParticles(seed.x, s.groundY, 3, [[139, 90, 43], [101, 67, 33]]);
+          sounds.impact();
+          juice.shake(2, 0.1);
         }
       }
     }
@@ -311,11 +350,23 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       const score = Math.round(s.seedsHit * 10 * bonus);
       setPhase('ended');
       setDisplayScore(score);
+      if (accuracy >= 0.5) {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash(COLORS.mint, 0.5);
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash(COLORS.red, 0.4);
+      }
       ctx.restore();
       return;
     }
 
     // --- RENDER ---
+    // Apply screen shake
+    juice.applyShake(ctx);
+
     // Sky gradient
     const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
     skyGrad.addColorStop(0, '#2a7ab5');
@@ -363,9 +414,16 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
     }
     ctx.setLineDash([]);
 
-    // Fertile spots
+    // Fertile spots with glow
     for (const spot of s.spots) {
       if (!spot.active) continue;
+
+      // Glow effect on active spots
+      if (!spot.hit) {
+        const glowColor = spot.bonus ? COLORS.gold : '#8B5A2B';
+        juice.drawGlow(ctx, spot.x, spot.y, spot.radius * 2.5, glowColor, spot.bonus ? 0.5 : 0.2);
+      }
+
       ctx.beginPath();
       ctx.ellipse(spot.x, spot.y, spot.radius, 6, 0, 0, Math.PI * 2);
       if (spot.hit) {
@@ -381,7 +439,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       ctx.fill();
     }
 
-    // Grown trees
+    // Grown trees with glow
     for (const tree of s.trees) {
       if (!tree.active) continue;
       const g = tree.growth / tree.maxGrowth;
@@ -392,9 +450,15 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       ctx.fillStyle = '#5c3a1e';
       ctx.fillRect(tree.x - trunkW / 2, tree.y - treeH, trunkW, treeH);
 
-      // Canopy (grows in)
+      // Canopy (grows in) with glow
       if (g > 0.3) {
         const canopyR = (g - 0.3) / 0.7 * 18;
+
+        // Additive glow while growing
+        if (tree.growing) {
+          juice.drawGlow(ctx, tree.x, tree.y - treeH, canopyR * 2, COLORS.mint, 0.3 * g);
+        }
+
         ctx.beginPath();
         ctx.arc(tree.x, tree.y - treeH, canopyR, 0, Math.PI * 2);
         ctx.fillStyle = '#22a855';
@@ -407,9 +471,15 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       }
     }
 
-    // Seeds in flight
+    // Seeds in flight with glow trail
     for (const seed of s.seeds) {
       if (!seed.active) continue;
+
+      if (!seed.landed) {
+        // Glow around seed in flight
+        juice.drawGlow(ctx, seed.x, seed.y, 12, COLORS.gold, 0.35);
+      }
+
       ctx.beginPath();
       ctx.arc(seed.x, seed.y, seed.landed ? 3 : 4, 0, Math.PI * 2);
       ctx.fillStyle = seed.landed ? '#5c3a1e' : '#8B4513';
@@ -425,9 +495,13 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       }
     }
 
-    // Draw toucan
+    // Draw toucan with subtle glow
     const bx = s.toucanX;
     const by = s.toucanY + Math.sin(s.toucanBobT) * 5;
+
+    // Toucan glow aura
+    juice.drawGlow(ctx, bx + 10, by, 45, COLORS.cyan, 0.12);
+
     ctx.save();
     ctx.translate(bx, by);
 
@@ -493,27 +567,30 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
 
     ctx.restore();
 
-    // Seed count near toucan
-    ctx.font = 'bold 14px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Seeds: ${s.seedsLeft}`, bx - 20, by - 30);
+    // Seed count near toucan - neon text
+    juice.drawNeonText(ctx, `Seeds: ${s.seedsLeft}`, bx, by - 35, s.seedsLeft <= 5 ? COLORS.red : COLORS.white, 14);
 
     // Wind indicator
     const windArrowX = w - 80;
     const windArrowY = 70;
     ctx.save();
     ctx.translate(windArrowX, windArrowY);
-    // Label
-    ctx.font = '12px sans-serif';
+    // Label - neon
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
+    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowBlur = 8;
     ctx.fillStyle = COLORS.gray;
     ctx.fillText('Wind', 0, -18);
+    ctx.shadowBlur = 0;
     // Arrow
     const windLen = Math.abs(s.windX) * 25;
     const windDir = s.windX > 0 ? 1 : -1;
-    ctx.strokeStyle = Math.abs(s.windX) > 0.7 ? COLORS.gold : COLORS.cyan;
+    const windColor = Math.abs(s.windX) > 0.7 ? COLORS.gold : COLORS.cyan;
+    ctx.strokeStyle = windColor;
     ctx.lineWidth = 3;
+    ctx.shadowColor = windColor;
+    ctx.shadowBlur = 10;
     ctx.beginPath();
     ctx.moveTo(-windLen * windDir, 0);
     ctx.lineTo(windLen * windDir, 0);
@@ -525,18 +602,24 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       ctx.lineTo((windLen - 6) * windDir, -5);
       ctx.lineTo((windLen - 6) * windDir, 5);
       ctx.closePath();
-      ctx.fillStyle = Math.abs(s.windX) > 0.7 ? COLORS.gold : COLORS.cyan;
+      ctx.fillStyle = windColor;
       ctx.fill();
     }
+    ctx.shadowBlur = 0;
     ctx.restore();
 
-    // Flash effect
+    // Flash effect (original)
     if (s.flashAlpha > 0.01) {
       ctx.fillStyle = `rgba(46,234,163,${s.flashAlpha})`;
       ctx.fillRect(0, 0, w, h);
     }
 
-    // Particles
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
+
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -554,28 +637,38 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
 
-    // HUD - Timer bar
+    // HUD - Timer bar with glow
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    ctx.shadowColor = timerColor;
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
+    ctx.shadowBlur = 0;
 
-    // Timer text
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Timer text - neon
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, s.timeLeft < 5 ? COLORS.red : COLORS.white, 24);
 
-    // Score
-    ctx.font = '16px sans-serif';
+    // Score - neon
+    ctx.save();
     ctx.textAlign = 'left';
+    ctx.font = `bold 16px ${FONT_FAMILY}`;
+    ctx.shadowColor = COLORS.mint;
+    ctx.shadowBlur = 10;
     ctx.fillStyle = COLORS.white;
     ctx.fillText(`Hits: ${s.seedsHit} / ${s.seedsDropped}`, 20, 40);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Subtle bloom on the whole scene
+    juice.applyBloom(ctx, w, h, 0.06);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, getLaneY]));
+  }, [phase, sounds, haptics, juice, spawnParticles, getLaneY]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -595,6 +688,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       s.windX = 0;
       s.windTimer = 0;
       s.flashAlpha = 0;
+      s.lastWarningSecond = -1;
       for (const sp of s.spots) sp.active = false;
       for (const seed of s.seeds) { seed.active = false; seed.landed = false; }
       for (const tree of s.trees) tree.active = false;
@@ -614,42 +708,88 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
     ? Math.round((state.current.seedsHit / state.current.seedsDropped) * 100) : 0;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', fontFamily: FONT_FAMILY }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
       {phase === 'ended' && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
+            fontFamily: FONT_FAMILY,
+            textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}80`,
+          }}>
             Time's Up!
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.gold, fontSize: 20, marginBottom: 8,
+            fontFamily: FONT_FAMILY,
+            textShadow: `0 0 12px ${COLORS.gold}80`,
+          }}>
             Seeds landed: {state.current.seedsHit} / {state.current.seedsDropped}
           </div>
-          <div style={{ color: COLORS.mint, fontSize: 18, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.mint, fontSize: 18, marginBottom: 8,
+            fontFamily: FONT_FAMILY,
+            textShadow: `0 0 12px ${COLORS.mint}80`,
+          }}>
             Accuracy: {accuracy}%
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4,
+            fontFamily: FONT_FAMILY,
+            textShadow: `0 0 24px ${COLORS.gold}, 0 0 48px ${COLORS.gold}60`,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
-          <button onClick={() => onComplete(displayScore)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <div style={{
+            color: COLORS.gray, fontSize: 14, marginBottom: 24,
+            fontFamily: FONT_FAMILY,
+            textShadow: `0 0 8px ${COLORS.gray}40`,
+          }}>points</div>
+          <button onClick={() => {
+            sounds.pop();
+            haptics.tapFeedback();
+            onComplete(displayScore);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+            color: COLORS.primary, border: 'none',
+            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
+            cursor: 'pointer', marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
+            textShadow: 'none',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+          <button onClick={() => {
+            sounds.tick();
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.08)',
+            color: COLORS.gray, border: `1px solid ${COLORS.gray}50`,
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>
