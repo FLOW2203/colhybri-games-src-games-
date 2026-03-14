@@ -2,12 +2,15 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 30;
 const POOL_SIZE = 100;
 const MAX_TOKENS = 10;
 const SELFISH_TIMEOUT = 3;
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 export default function GameDonBecABec({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -16,6 +19,8 @@ export default function GameDonBecABec({ onComplete, onBack }) {
   const [displayTime, setDisplayTime] = useState(GAME_DURATION);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     score: 0,
@@ -94,15 +99,20 @@ export default function GameDonBecABec({ onComplete, onBack }) {
       };
       s.flyingTokens.push(flyToken);
       sounds.chime();
+      sounds.whoosh();
+      haptics.tapFeedback();
+      juice.flash('#F5A623', 0.15);
       spawnParticles(s.donorX + 30, s.donorY - 20, 5, 245, 166, 35);
     }
-  }, [phase, sounds, spawnParticles]);
+  }, [phase, sounds, spawnParticles, haptics, juice]);
 
   const handleTap = useCallback(() => {
     if (phase === 'ready') {
       setPhase('playing');
+      haptics.tapFeedback();
+      sounds.pop();
     }
-  }, [phase]);
+  }, [phase, haptics, sounds]);
 
   useTouch(canvasRef, { onSwipe: handleSwipe, onTap: handleTap });
 
@@ -237,6 +247,9 @@ export default function GameDonBecABec({ onComplete, onBack }) {
     ctx.save();
     ctx.scale(dpr, dpr);
 
+    // Update juice effects
+    juice.update(delta);
+
     const s = state.current;
     s.donorX = w * 0.28;
     s.donorY = h * 0.5;
@@ -246,24 +259,43 @@ export default function GameDonBecABec({ onComplete, onBack }) {
     if (phase === 'ready') {
       ctx.fillStyle = COLORS.primary;
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+
+      // Neon title
+      juice.drawNeonText(ctx, 'Don Bec-a-Bec', w / 2, h / 2 - 70, COLORS.mint, 28);
+
+      // Subtitle with glow
+      ctx.save();
+      ctx.font = `17px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Don Bec-a-Bec', w / 2, h / 2 - 70);
-      ctx.font = '17px sans-serif';
+      ctx.shadowColor = COLORS.cyan;
+      ctx.shadowBlur = 8;
       ctx.fillStyle = COLORS.mint;
       ctx.fillText('Parrots: first proven non-mammal', w / 2, h / 2 - 20);
       ctx.fillText('altruists - they give 10/10 tokens!', w / 2, h / 2 + 6);
-      ctx.font = '15px sans-serif';
+      ctx.restore();
+
+      ctx.font = `15px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('SWIPE RIGHT to give tokens', w / 2, h / 2 + 50);
       ctx.fillText('Generosity = maximum score', w / 2, h / 2 + 72);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillText('TAP TO START', w / 2, h / 2 + 120);
+
+      // Pulsing TAP TO START with neon
+      const pulse = 0.7 + 0.3 * Math.sin(elapsed * 4);
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.white, 20);
+      ctx.restore();
+
+      // Decorative glow behind title
+      juice.drawGlow(ctx, w / 2, h / 2 - 70, 120, COLORS.mint, 0.15);
+
       ctx.restore();
       return;
     }
+
+    // Apply screen shake
+    juice.applyShake(ctx);
 
     // Update time
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
@@ -276,6 +308,7 @@ export default function GameDonBecABec({ onComplete, onBack }) {
       s.donorTokens++;
       spawnParticles(s.donorX, s.donorY - 60, 3, 245, 166, 35);
       sounds.tick();
+      haptics.tapFeedback();
     }
 
     // Selfish penalty
@@ -287,6 +320,16 @@ export default function GameDonBecABec({ onComplete, onBack }) {
         if (s.score > 0) {
           s.score = Math.max(0, s.score - delta * 3);
           setDisplayScore(Math.floor(s.score));
+          // Shake and red flash on score loss
+          if (Math.floor(s.selfishTimer * 2) % 2 === 0) {
+            juice.shake(3, 0.15);
+            juice.flash('#EF4444', 0.1);
+          }
+        }
+        // Warning haptic when selfish
+        if (s.selfishTimer > SELFISH_TIMEOUT && s.selfishTimer < SELFISH_TIMEOUT + delta * 2) {
+          haptics.warningFeedback();
+          sounds.fail();
         }
       } else {
         s.receiverMood = 'happy';
@@ -315,6 +358,10 @@ export default function GameDonBecABec({ onComplete, onBack }) {
         setDisplayScore(Math.floor(s.score));
         spawnParticles(s.receiverX - 30, s.receiverY - 20, 8, 233, 30, 140, 'heart');
         sounds.chime();
+        sounds.pop();
+        haptics.impactFeedback();
+        juice.shake(5, 0.2);
+        juice.flash('#22C55E', 0.2);
       }
     }
 
@@ -334,6 +381,8 @@ export default function GameDonBecABec({ onComplete, onBack }) {
       };
       s.flyingTokens.push(flyToken);
       s.donorTokens++;
+      sounds.wingflap();
+      haptics.tapFeedback();
     }
 
     // Animation
@@ -353,7 +402,25 @@ export default function GameDonBecABec({ onComplete, onBack }) {
     // Game over
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
+      if (s.score > 50) {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#22C55E', 0.4);
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#EF4444', 0.3);
+      }
+      juice.shake(8, 0.4);
       return;
+    }
+
+    // Low time warning haptic
+    if (s.timeLeft < 5 && s.timeLeft > 0) {
+      if (Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+        haptics.warningFeedback();
+        sounds.countdown(s.timeLeft <= 1);
+      }
     }
 
     // --- RENDER ---
@@ -375,45 +442,65 @@ export default function GameDonBecABec({ onComplete, onBack }) {
     ctx.quadraticCurveTo(w * 0.5, h * 0.5 + 52, w * 0.9, h * 0.5 + 37);
     ctx.stroke();
 
+    // Glow effects behind parrots
+    juice.drawGlow(ctx, s.donorX, s.donorY, 60, '#22C55E', 0.2);
+    juice.drawGlow(ctx, s.receiverX, s.receiverY, 60, '#3B82F6', 0.2);
+
+    // Sad receiver gets red warning glow
+    if (s.receiverMood === 'sad') {
+      juice.drawGlow(ctx, s.receiverX, s.receiverY, 80, '#EF4444', 0.15 + 0.1 * Math.sin(elapsed * 6));
+    }
+
     // Draw parrots
     drawParrot(ctx, s.donorX, s.donorY, '#22C55E', s.donorBob, 'happy', false);
     drawParrot(ctx, s.receiverX, s.receiverY, '#3B82F6', s.receiverBob, s.receiverMood, true);
 
-    // Labels
-    ctx.font = 'bold 14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#22C55E';
-    ctx.fillText('DONOR', s.donorX, s.donorY + 60);
-    ctx.fillStyle = '#3B82F6';
-    ctx.fillText('RECEIVER', s.receiverX, s.receiverY + 60);
+    // Neon labels
+    juice.drawNeonText(ctx, 'DONOR', s.donorX, s.donorY + 60, '#22C55E', 14);
+    juice.drawNeonText(ctx, 'RECEIVER', s.receiverX, s.receiverY + 60, '#3B82F6', 14);
 
-    // Donor tokens stack
+    // Donor tokens stack with glow
     for (let i = 0; i < s.donorTokens; i++) {
       const tx = s.donorX - 50 + (i % 5) * 14;
       const ty = s.donorY - 80 - Math.floor(i / 5) * 14;
       drawToken(ctx, tx, ty, 6);
     }
+    if (s.donorTokens > 0) {
+      juice.drawGlow(ctx, s.donorX - 22, s.donorY - 85, 35, '#F5A623', 0.15);
+    }
 
-    // Receiver tokens stack
+    // Receiver tokens stack with glow
     for (let i = 0; i < s.receiverTokens; i++) {
       const tx = s.receiverX + 20 + (i % 5) * 14;
       const ty = s.receiverY - 80 - Math.floor(i / 5) * 14;
       drawToken(ctx, tx, ty, 6);
     }
+    if (s.receiverTokens > 0) {
+      juice.drawGlow(ctx, s.receiverX + 48, s.receiverY - 85, 35, '#F5A623', 0.15);
+    }
 
-    // Flying tokens
+    // Flying tokens with glow and additive blending trail
     for (const ft of s.flyingTokens) {
+      // Additive glow trail
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      juice.drawGlow(ctx, ft.x, ft.y, 20, '#FFE066', 0.4);
+      ctx.restore();
       drawToken(ctx, ft.x, ft.y, 8);
       // Trail particles
       spawnParticles(ft.x, ft.y, 1, 245, 200, 50);
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
       if (p.type === 'heart') {
+        ctx.globalCompositeOperation = 'source-over';
         drawHeart(ctx, p.x, p.y, p.size, alpha);
+        ctx.globalCompositeOperation = 'lighter';
       } else {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
@@ -421,43 +508,45 @@ export default function GameDonBecABec({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
 
-    // Selfish warning
+    // Selfish warning with neon and shake
     if (s.selfishTimer > SELFISH_TIMEOUT * 0.7 && s.donorTokens > 0) {
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(239,68,68,${0.5 + 0.5 * Math.sin(elapsed * 6)})`;
-      ctx.fillText('Share your tokens!', w / 2, h * 0.25);
+      const warningAlpha = 0.5 + 0.5 * Math.sin(elapsed * 6);
+      ctx.save();
+      ctx.globalAlpha = warningAlpha;
+      juice.drawNeonText(ctx, 'Share your tokens!', w / 2, h * 0.25, '#EF4444', 16);
+      ctx.restore();
     }
 
-    // Scores
-    ctx.font = 'bold 18px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#22C55E';
-    ctx.fillText(`Donor: ${Math.floor(s.donorScore)}`, w * 0.3, h * 0.12);
-    ctx.fillStyle = '#3B82F6';
-    ctx.fillText(`Receiver: ${Math.floor(s.receiverScore)}`, w * 0.7, h * 0.12);
+    // Neon scores
+    juice.drawNeonText(ctx, `Donor: ${Math.floor(s.donorScore)}`, w * 0.3, h * 0.12, '#22C55E', 18);
+    juice.drawNeonText(ctx, `Receiver: ${Math.floor(s.receiverScore)}`, w * 0.7, h * 0.12, '#3B82F6', 18);
 
-    // Total score
-    ctx.font = 'bold 22px sans-serif';
-    ctx.fillStyle = COLORS.gold;
-    ctx.fillText(`Total: ${Math.floor(s.score)}`, w / 2, h * 0.07);
+    // Total score with glow
+    juice.drawNeonText(ctx, `Total: ${Math.floor(s.score)}`, w / 2, h * 0.07, COLORS.gold, 22);
+    juice.drawGlow(ctx, w / 2, h * 0.07, 50, COLORS.gold, 0.12);
 
     // Swipe hint
     if (s.donorTokens > 0 && elapsed < 5) {
-      ctx.font = '14px sans-serif';
+      ctx.font = `14px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText('SWIPE RIGHT to give →', w / 2, h * 0.85);
+      ctx.fillText('SWIPE RIGHT to give \u2192', w / 2, h * 0.85);
     }
 
-    // Timer
-    ctx.font = 'bold 24px sans-serif';
+    // Timer with neon
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.white;
+    ctx.save();
     ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 20, 40, timerColor, 24);
+    ctx.restore();
+
+    // Draw screen flash overlay
+    juice.drawFlash(ctx, w, h);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+  }, [phase, sounds, spawnParticles, haptics, juice]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -496,30 +585,108 @@ export default function GameDonBecABec({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 30, fontWeight: 'bold', marginBottom: 8 }}>Generosity Wins!</div>
-          <div style={{ color: COLORS.gold, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{Math.floor(state.current.score)}</div>
-          <div style={{ color: COLORS.gray, fontSize: 15, marginBottom: 4 }}>Tokens given: {state.current.totalGiven}</div>
-          <div style={{ color: COLORS.gray, fontSize: 13, marginBottom: 24 }}>
+          <div style={{
+            color: COLORS.white,
+            fontSize: 30,
+            fontWeight: 'bold',
+            marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`,
+          }}>
+            Generosity Wins!
+          </div>
+          <div style={{
+            color: COLORS.gold,
+            fontSize: 48,
+            fontWeight: 'bold',
+            marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.gold}, 0 0 40px ${COLORS.gold}80, 0 0 60px ${COLORS.gold}40`,
+          }}>
+            {Math.floor(state.current.score)}
+          </div>
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 15,
+            marginBottom: 4,
+            textShadow: '0 0 6px rgba(255,255,255,0.3)',
+          }}>
+            Tokens given: {state.current.totalGiven}
+          </div>
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 13,
+            marginBottom: 24,
+            textShadow: '0 0 6px rgba(255,255,255,0.3)',
+          }}>
             First proven non-mammal altruist!
           </div>
-          <button onClick={() => onComplete(Math.floor(state.current.score))} style={{
-            background: COLORS.mint, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
-          }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
-          }}>Back</button>
+          <button
+            onClick={() => {
+              haptics.tapFeedback();
+              sounds.success();
+              onComplete(Math.floor(state.current.score));
+            }}
+            style={{
+              background: `linear-gradient(135deg, ${COLORS.mint}, ${COLORS.green})`,
+              color: COLORS.primary,
+              border: 'none',
+              padding: '14px 40px',
+              borderRadius: 12,
+              fontSize: 18,
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginBottom: 12,
+              fontFamily: FONT_FAMILY,
+              boxShadow: `0 0 20px ${COLORS.mint}60, 0 4px 15px rgba(0,0,0,0.3)`,
+              textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+            }}
+          >
+            Continue
+          </button>
+          <button
+            onClick={() => {
+              haptics.tapFeedback();
+              onBack();
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              color: COLORS.gray,
+              border: `1px solid ${COLORS.gray}60`,
+              padding: '10px 30px',
+              borderRadius: 12,
+              fontSize: 14,
+              cursor: 'pointer',
+              fontFamily: FONT_FAMILY,
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+            }}
+          >
+            Back
+          </button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
-          position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
-          color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
-          fontSize: 14, cursor: 'pointer', zIndex: 10,
-        }}>Back</button>
+        <button
+          onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }}
+          style={{
+            position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
+            color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
+            fontSize: 14, cursor: 'pointer', zIndex: 10,
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+          }}
+        >
+          Back
+        </button>
       )}
     </div>
   );
