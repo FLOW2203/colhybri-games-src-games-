@@ -10,7 +10,13 @@
     }
   ],
   "rewrites": [
-    { "source": "/games/(.*)", "destination": "/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/games/assets/:path*", "destination": "/assets/:path*" },
+    { "source": "/games/icon.svg", "destination": "/icon.svg" },
+    { "source": "/games/sw.js", "destination": "/sw.js" },
+    { "source": "/games/registerSW.js", "destination": "/registerSW.js" },
+    { "source": "/games/manifest.webmanifest", "destination": "/manifest.webmanifest" },
+    { "source": "/games/workbox-:hash.js", "destination": "/workbox-:hash.js" },
+    { "source": "/games", "destination": "/index.html" },
+    { "source": "/games/(.*)", "destination": "/index.html" }
   ]
 }
