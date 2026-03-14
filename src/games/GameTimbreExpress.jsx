@@ -2,6 +2,8 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 30;
@@ -16,6 +18,8 @@ const COMBO_THRESHOLD = 5;
 const PARCEL_WIDTH_RATIO = 0.16;
 const PARCEL_HEIGHT_RATIO = 0.08;
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+
 const PARCEL_COLORS = [
   [180, 140, 100], [200, 160, 110], [160, 120, 90],
   [190, 150, 105], [170, 130, 95],
@@ -27,6 +31,8 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -128,6 +134,13 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       s.flashColor = [34, 197, 94];
       s.scaleTilt = swipedLeft ? -0.15 : 0.15;
       sounds.tick();
+      sounds.whoosh();
+      haptics.tapFeedback();
+      juice.flash('#22C55E', 0.2);
+      if (s.streak >= COMBO_THRESHOLD && s.streak % COMBO_THRESHOLD === 0) {
+        sounds.combo(s.comboMultiplier);
+        haptics.comboFeedback(s.comboMultiplier);
+      }
       spawnParticles(p.x, p.y, 6, [
         [34, 197, 94], [46, 234, 163], [255, 255, 255],
       ]);
@@ -138,15 +151,22 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       s.flashAlpha = 0.25;
       s.flashColor = [239, 68, 68];
       sounds.firecrackle();
+      sounds.fail();
+      haptics.failFeedback();
+      juice.shake(10, 0.35);
+      juice.flash('#EF4444', 0.35);
       spawnParticles(p.x, p.y, 8, [
         [239, 68, 68], [255, 100, 100], [200, 50, 50],
       ]);
       if (s.lives <= 0) {
+        sounds.impact();
+        haptics.heavyFeedback();
+        juice.shake(16, 0.5);
         setPhase('ended');
         setDisplayScore(s.score);
       }
     }
-  }, [sounds, spawnParticles]);
+  }, [sounds, haptics, juice, spawnParticles]);
 
   const handleSwipe = useCallback((direction) => {
     if (phase !== 'playing') return;
@@ -169,7 +189,11 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        sounds.countdown(true);
+        haptics.tapFeedback();
+      }
       return;
     }
     // Tap left/right half of screen as alternative to swipe
@@ -182,7 +206,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
     } else {
       handleSwipe('right');
     }
-  }, [phase, handleSwipe]);
+  }, [phase, handleSwipe, sounds, haptics]);
 
   useTouch(canvasRef, { onTap: handleTap, onSwipe: handleSwipe });
 
@@ -205,6 +229,9 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
     const s = state.current;
     const cx = w / 2;
 
+    // Update juice effects
+    juice.update(delta);
+
     if (phase === 'ready') {
       const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
       skyGrad.addColorStop(0, '#2c1a4c');
@@ -213,31 +240,45 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Timbre Express', cx, h * 0.3, COLORS.cyan, 28);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Timbre Express', cx, h * 0.3);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.gold;
+      ctx.shadowColor = COLORS.gold;
+      ctx.shadowBlur = 8;
       ctx.fillText('Hummingbirds weigh just ~2g', cx, h * 0.38);
       ctx.fillText('as light as a postage stamp!', cx, h * 0.38 + 24);
-      ctx.font = '16px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Swipe LEFT for lighter than 2g', cx, h * 0.52);
       ctx.fillText('Swipe RIGHT for heavier', cx, h * 0.52 + 22);
       ctx.fillText('Or tap left/right half of screen', cx, h * 0.52 + 44);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing "TAP TO START" with neon
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, h * 0.72);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.72, COLORS.mint, 20);
       ctx.globalAlpha = 1;
+
+      // Glow behind title
+      juice.drawGlow(ctx, cx, h * 0.3, 120, COLORS.cyan, 0.15);
+
       ctx.restore();
       return;
     }
 
     // Update time
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
+
+    // Warning haptic when low on time
+    if (s.timeLeft <= 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.countdown(false);
+    }
 
     // Increase speed over time
     s.currentSpeed = INITIAL_SPEED + elapsed * SPEED_INCREASE;
@@ -272,7 +313,13 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
           s.flashAlpha = 0.2;
           s.flashColor = [239, 68, 68];
           sounds.firecrackle();
+          sounds.impact();
+          haptics.impactFeedback();
+          juice.shake(8, 0.3);
+          juice.flash('#EF4444', 0.25);
           if (s.lives <= 0) {
+            haptics.heavyFeedback();
+            juice.shake(16, 0.5);
             setPhase('ended');
             setDisplayScore(s.score);
             return;
@@ -302,12 +349,17 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
 
     // Game over by time
     if (s.timeLeft <= 0 && phase === 'playing') {
+      sounds.success();
+      haptics.successFeedback();
       setPhase('ended');
       setDisplayScore(s.score);
       return;
     }
 
     // --- RENDER ---
+    // Apply screen shake
+    juice.applyShake(ctx);
+
     // Background
     const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
     skyGrad.addColorStop(0, '#2c1a4c');
@@ -316,12 +368,15 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // Flash overlay
+    // Flash overlay (original)
     if (s.flashAlpha > 0.01) {
       const [fr, fg, fb] = s.flashColor;
       ctx.fillStyle = `rgba(${fr},${fg},${fb},${s.flashAlpha})`;
       ctx.fillRect(0, 0, w, h);
     }
+
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
 
     // Bin area - left (light)
     const binWidth = w * 0.38;
@@ -329,45 +384,56 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
     const leftBinX = w * 0.05;
     const rightBinX = w * 0.57;
 
-    // Left bin
+    // Left bin with glow
+    juice.drawGlow(ctx, leftBinX + binWidth / 2, binY + binHeight / 2, binWidth * 0.6, '#64B4FF', 0.1);
     ctx.fillStyle = 'rgba(100,180,255,0.2)';
     ctx.strokeStyle = 'rgba(100,180,255,0.5)';
     ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(100,180,255,0.4)';
+    ctx.shadowBlur = 12;
     ctx.beginPath();
     ctx.roundRect(leftBinX, binY, binWidth, binHeight, 8);
     ctx.fill();
     ctx.stroke();
-    ctx.font = 'bold 14px sans-serif';
+    ctx.shadowBlur = 0;
+    ctx.font = `bold 14px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(100,180,255,0.9)';
     ctx.fillText('LIGHTER', leftBinX + binWidth / 2, binY + binHeight / 2 - 6);
-    ctx.font = '11px sans-serif';
+    ctx.font = `11px ${FONT_FAMILY}`;
     ctx.fillText('< 2g', leftBinX + binWidth / 2, binY + binHeight / 2 + 10);
     // Arrow left
-    ctx.font = '20px sans-serif';
+    ctx.font = `20px ${FONT_FAMILY}`;
     ctx.fillText('\u2190', leftBinX + binWidth / 2, binY - 10);
 
-    // Right bin
+    // Right bin with glow
+    juice.drawGlow(ctx, rightBinX + binWidth / 2, binY + binHeight / 2, binWidth * 0.6, '#FF9650', 0.1);
     ctx.fillStyle = 'rgba(255,150,80,0.2)';
     ctx.strokeStyle = 'rgba(255,150,80,0.5)';
     ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(255,150,80,0.4)';
+    ctx.shadowBlur = 12;
     ctx.beginPath();
     ctx.roundRect(rightBinX, binY, binWidth, binHeight, 8);
     ctx.fill();
     ctx.stroke();
-    ctx.font = 'bold 14px sans-serif';
+    ctx.shadowBlur = 0;
+    ctx.font = `bold 14px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,150,80,0.9)';
     ctx.fillText('HEAVIER', rightBinX + binWidth / 2, binY + binHeight / 2 - 6);
-    ctx.font = '11px sans-serif';
+    ctx.font = `11px ${FONT_FAMILY}`;
     ctx.fillText('> 2g', rightBinX + binWidth / 2, binY + binHeight / 2 + 10);
     // Arrow right
-    ctx.font = '20px sans-serif';
+    ctx.font = `20px ${FONT_FAMILY}`;
     ctx.fillText('\u2192', rightBinX + binWidth / 2, binY - 10);
 
     // Center scale with colibri
     const scaleX = cx;
     const scaleY = binY + binHeight / 2;
+
+    // Scale glow
+    juice.drawGlow(ctx, scaleX, scaleY - 30, 40, COLORS.mint, 0.15);
 
     // Scale base
     ctx.fillStyle = 'rgba(200,200,200,0.4)';
@@ -393,7 +459,10 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
     ctx.beginPath();
     ctx.ellipse(0, 0, 18, 10, 0, 0, Math.PI * 2);
     ctx.fillStyle = '#2EEAA3';
+    ctx.shadowColor = '#2EEAA3';
+    ctx.shadowBlur = 10;
     ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.beginPath();
     ctx.arc(18, -3, 6, 0, Math.PI * 2);
     ctx.fillStyle = '#2EEAA3';
@@ -421,11 +490,8 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
     ctx.globalAlpha = 1;
     ctx.restore();
 
-    // "2g" label near colibri
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.mint;
-    ctx.fillText('2g', scaleX, scaleY - 56 + s.birdBob);
+    // "2g" neon label near colibri
+    juice.drawNeonText(ctx, '2g', scaleX, scaleY - 56 + s.birdBob, COLORS.mint, 11);
 
     // Draw parcels
     const parcelW = w * PARCEL_WIDTH_RATIO;
@@ -441,9 +507,14 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       const [cr, cg, cb] = p.color;
 
       if (p.golden) {
-        // Golden parcel glow
-        ctx.shadowColor = 'rgba(245,166,35,0.6)';
-        ctx.shadowBlur = 15;
+        // Golden parcel glow (enhanced)
+        ctx.shadowColor = 'rgba(245,166,35,0.8)';
+        ctx.shadowBlur = 20;
+        juice.drawGlow(ctx, p.x, p.y, parcelW * 1.2, '#F5A623', 0.25 * p.fadeAlpha);
+      } else {
+        // Subtle glow for regular parcels
+        ctx.shadowColor = `rgba(${cr},${cg},${cb},0.3)`;
+        ctx.shadowBlur = 6;
       }
 
       // Parcel body
@@ -467,7 +538,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       ctx.fillRect(px, py + parcelH * 0.35, parcelW, parcelH * 0.3);
 
       // Weight label
-      ctx.font = `bold ${Math.floor(parcelH * 0.45)}px sans-serif`;
+      ctx.font = `bold ${Math.floor(parcelH * 0.45)}px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = p.golden ? '#4a3000' : '#3a2a1a';
@@ -475,7 +546,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
 
       // Golden sparkle
       if (p.golden) {
-        ctx.font = '10px sans-serif';
+        ctx.font = `10px ${FONT_FAMILY}`;
         ctx.fillStyle = '#FFD700';
         ctx.fillText('x3', p.x + parcelW * 0.3, p.y - parcelH * 0.3);
       }
@@ -483,7 +554,9 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       ctx.restore();
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -501,65 +574,83 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
 
     // --- HUD ---
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = timerColor;
+    ctx.shadowColor = timerColor;
+    ctx.shadowBlur = 8;
     ctx.fillRect(0, 0, w * timerFrac, 4);
+    ctx.shadowBlur = 0;
 
-    // Timer text
-    ctx.font = 'bold 24px sans-serif';
+    // Timer text with neon
+    const timerTextColor = s.timeLeft < 5 ? COLORS.red : COLORS.white;
+    ctx.save();
     ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    if (s.timeLeft < 5) {
+      juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 20, 40, COLORS.red, 24);
+    } else {
+      ctx.font = `bold 24px ${FONT_FAMILY}`;
+      ctx.fillStyle = timerTextColor;
+      ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    }
+    ctx.restore();
 
-    // Score
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 20, 40);
+    // Score with neon glow
+    juice.drawNeonText(ctx, `Score: ${s.score}`, 80, 40, COLORS.white, 20);
 
     // Lives
-    ctx.font = '18px sans-serif';
+    ctx.font = `18px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.red;
+    ctx.shadowColor = COLORS.red;
+    ctx.shadowBlur = 8;
     let livesStr = '';
     for (let i = 0; i < LIVES_TOTAL; i++) {
       livesStr += i < s.lives ? '\u2665 ' : '\u2661 ';
     }
     ctx.fillText(livesStr, 20, 65);
+    ctx.shadowBlur = 0;
 
-    // Streak / Combo
+    // Streak / Combo with neon
     if (s.streak >= COMBO_THRESHOLD) {
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.gold;
       const pulseScale = 1 + Math.sin(elapsed * 8) * 0.1;
       ctx.save();
       ctx.translate(cx, 55);
       ctx.scale(pulseScale, pulseScale);
-      ctx.fillText(`COMBO x${s.comboMultiplier}`, 0, 0);
+      juice.drawNeonText(ctx, `COMBO x${s.comboMultiplier}`, 0, 0, COLORS.gold, 18);
+      // Glow behind combo text
       ctx.restore();
+      juice.drawGlow(ctx, cx, 55, 60, COLORS.gold, 0.2);
     }
 
     // Streak counter
     if (s.streak > 0) {
-      ctx.font = '14px sans-serif';
+      ctx.font = `14px ${FONT_FAMILY}`;
       ctx.textAlign = 'right';
       ctx.fillStyle = COLORS.mint;
+      ctx.shadowColor = COLORS.mint;
+      ctx.shadowBlur = 6;
       ctx.fillText(`Streak: ${s.streak}`, w - 20, 65);
+      ctx.shadowBlur = 0;
     }
 
     // Sorted count
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = COLORS.gray;
     ctx.fillText(`Sorted: ${s.totalSorted}`, cx, h - 15);
 
+    // Bloom post-processing (subtle)
+    juice.applyBloom(ctx, w, h, 0.06);
+
     ctx.restore();
-  }, [phase, sounds, spawnParticles, spawnParcel]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnParcel]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -589,50 +680,138 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
   }, [phase, gameLoop]);
 
   useEffect(() => {
-    if (phase === 'ended') gameLoop.stop();
-  }, [phase, gameLoop]);
+    if (phase === 'ended') {
+      gameLoop.stop();
+      sounds.chime();
+      haptics.successFeedback();
+    }
+  }, [phase, gameLoop, sounds, haptics]);
 
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', fontFamily: FONT_FAMILY }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
       {phase === 'ended' && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>Results</div>
-          <div style={{ color: COLORS.mint, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.white,
+            fontSize: 28,
+            fontWeight: 'bold',
+            marginBottom: 16,
+            textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}80`,
+            fontFamily: FONT_FAMILY,
+          }}>Results</div>
+          <div style={{
+            color: COLORS.mint,
+            fontSize: 20,
+            marginBottom: 8,
+            textShadow: `0 0 12px ${COLORS.mint}`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Parcels Sorted: {state.current.totalSorted}
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 16, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.gold,
+            fontSize: 16,
+            marginBottom: 4,
+            textShadow: `0 0 10px ${COLORS.gold}`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Best Streak: {state.current.maxStreak}
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 16, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.cyan,
+            fontSize: 16,
+            marginBottom: 4,
+            textShadow: `0 0 10px ${COLORS.cyan}`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Max Combo: x{Math.max(1, Math.floor(state.current.maxStreak / COMBO_THRESHOLD) + 1)}
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white,
+            fontSize: 44,
+            fontWeight: 'bold',
+            marginBottom: 4,
+            textShadow: `0 0 30px ${COLORS.gold}, 0 0 60px ${COLORS.gold}80, 0 0 90px ${COLORS.gold}40`,
+            fontFamily: FONT_FAMILY,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
-          }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
-          }}>Back</button>
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 14,
+            marginBottom: 24,
+            fontFamily: FONT_FAMILY,
+          }}>points</div>
+          <button
+            onClick={() => {
+              sounds.pop();
+              haptics.tapFeedback();
+              onComplete(state.current.score);
+            }}
+            style={{
+              background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+              color: COLORS.primary,
+              border: 'none',
+              padding: '14px 40px',
+              borderRadius: 12,
+              fontSize: 18,
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginBottom: 12,
+              fontFamily: FONT_FAMILY,
+              boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
+              textShadow: 'none',
+              transition: 'transform 0.1s, box-shadow 0.1s',
+            }}
+          >Continue</button>
+          <button
+            onClick={() => {
+              sounds.tick();
+              haptics.tapFeedback();
+              onBack();
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              color: COLORS.gray,
+              border: `1px solid ${COLORS.gray}60`,
+              padding: '10px 30px',
+              borderRadius: 12,
+              fontSize: 14,
+              cursor: 'pointer',
+              fontFamily: FONT_FAMILY,
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+              transition: 'transform 0.1s, box-shadow 0.1s',
+            }}
+          >Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
-          position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
-          color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
-          fontSize: 14, cursor: 'pointer', zIndex: 10,
-        }}>Back</button>
+        <button
+          onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }}
+          style={{
+            position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
+            color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
+            fontSize: 14, cursor: 'pointer', zIndex: 10,
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+          }}
+        >Back</button>
       )}
     </div>
   );

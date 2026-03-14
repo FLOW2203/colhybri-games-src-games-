@@ -2,12 +2,15 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 45;
 const POOL_SIZE = 150;
 const MAX_LIVES = 3;
 const MAX_DEPTH = 100;
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -16,6 +19,8 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
   const [displayTime, setDisplayTime] = useState(GAME_DURATION);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     score: 0,
@@ -34,6 +39,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
     invincibleTimer: 0,
     damageFlash: 0,
     scrollOffset: 0,
+    lastWarningTime: 0,
     particles: Array(POOL_SIZE).fill(null).map(() => ({
       active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0,
       r: 0, g: 0, b: 0, size: 0,
@@ -65,26 +71,32 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
   }, []);
 
   const handleSwipe = useCallback((direction) => {
-    if (phase === 'ready') { setPhase('playing'); return; }
+    if (phase === 'ready') { setPhase('playing'); sounds.countdown(true); haptics.tapFeedback(); return; }
     if (phase !== 'playing') return;
     const s = state.current;
     const w = window.innerWidth;
     if (direction === 'down') {
       s.depthVelocity = Math.min(s.depthVelocity + 25, 60);
+      sounds.whoosh();
+      haptics.tapFeedback();
     } else if (direction === 'up' || direction === 'left' || direction === 'right') {
       if (direction === 'up') {
         s.depthVelocity = Math.max(s.depthVelocity - 30, -20);
+        sounds.wingflap();
+        haptics.tapFeedback();
       }
-      if (direction === 'left') s.parrotTargetX = Math.max(40, s.parrotX - 60);
-      if (direction === 'right') s.parrotTargetX = Math.min(w - 40, s.parrotX + 60);
+      if (direction === 'left') { s.parrotTargetX = Math.max(40, s.parrotX - 60); sounds.wingflap(); haptics.tapFeedback(); }
+      if (direction === 'right') { s.parrotTargetX = Math.min(w - 40, s.parrotX + 60); sounds.wingflap(); haptics.tapFeedback(); }
     }
-  }, [phase]);
+  }, [phase, sounds, haptics]);
 
   const handleTap = useCallback(() => {
-    if (phase === 'ready') { setPhase('playing'); return; }
+    if (phase === 'ready') { setPhase('playing'); sounds.countdown(true); haptics.tapFeedback(); return; }
     if (phase !== 'playing') return;
     state.current.depthVelocity = Math.max(state.current.depthVelocity - 15, -10);
-  }, [phase]);
+    sounds.wingflap();
+    haptics.tapFeedback();
+  }, [phase, sounds, haptics]);
 
   useTouch(canvasRef, { onSwipe: handleSwipe, onTap: handleTap });
 
@@ -213,22 +225,33 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
     if (phase === 'ready') {
       ctx.fillStyle = '#1A0A00';
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 22px sans-serif';
+
+      // Neon title
+      juice.drawNeonText(ctx, 'Transformation Arc-en-ciel', w / 2, h / 2 - 70, COLORS.gold, 22);
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Transformation Arc-en-ciel', w / 2, h / 2 - 70);
-      ctx.font = '16px sans-serif';
       ctx.fillStyle = COLORS.mint;
+      ctx.shadowColor = COLORS.mint;
+      ctx.shadowBlur = 8;
       ctx.fillText('Feathers scorched by fire', w / 2, h / 2 - 20);
       ctx.fillText('become rainbow (Jataka)', w / 2, h / 2 + 4);
-      ctx.font = '14px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `14px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('SWIPE DOWN: dive deeper (higher score)', w / 2, h / 2 + 44);
       ctx.fillText('SWIPE L/R: dodge | TAP: rise up', w / 2, h / 2 + 66);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillText('TAP TO START', w / 2, h / 2 + 120);
+
+      // Pulsing start text
+      const pulse = 0.7 + Math.sin(elapsed * 3) * 0.3;
+      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.white, 20);
+      ctx.globalAlpha = pulse;
+      juice.drawGlow(ctx, w / 2, h / 2 + 120, 80, COLORS.mint, 0.2);
+      ctx.globalAlpha = 1;
+
       ctx.restore();
+      juice.update(delta);
       return;
     }
 
@@ -296,10 +319,18 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
           s.lives--;
           s.invincibleTimer = 1.5;
           s.damageFlash = 1;
+          sounds.impact();
           sounds.firecrackle();
+          haptics.impactFeedback();
+          juice.shake(12, 0.4);
+          juice.flash('#FF0000', 0.5);
           spawnParticles(s.parrotX, h * 0.4, 12, 255, 100, 0);
           s.obstacles.splice(i, 1);
           if (s.lives <= 0) {
+            sounds.fail();
+            haptics.failFeedback();
+            juice.shake(18, 0.6);
+            juice.flash('#FF0000', 0.7);
             setPhase('ended');
             return;
           }
@@ -322,13 +353,33 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
         s.score += pts;
         setDisplayScore(s.score);
         spawnParticles(d.x, d.y, 6, 0, 191, 255);
+        sounds.drop();
         sounds.tick();
+        haptics.tapFeedback();
+        juice.flash('#00BFFF', 0.15);
+
+        // Combo feedback every 5 droplets
+        if (s.dropletsCollected % 5 === 0) {
+          sounds.combo(Math.floor(s.dropletsCollected / 5));
+          haptics.comboFeedback(Math.min(s.dropletsCollected / 5, 5));
+          juice.flash(COLORS.gold, 0.25);
+        }
       }
     }
 
     // Invincibility
     if (s.invincibleTimer > 0) s.invincibleTimer -= delta;
     s.damageFlash *= Math.pow(0.05, delta);
+
+    // Low time warning haptic
+    if (s.timeLeft <= 5 && s.timeLeft > 0) {
+      const currentSecond = Math.ceil(s.timeLeft);
+      if (currentSecond !== s.lastWarningTime) {
+        s.lastWarningTime = currentSecond;
+        haptics.warningFeedback();
+        sounds.countdown(false);
+      }
+    }
 
     // Ambient embers floating up
     for (const e of s.embers) {
@@ -361,11 +412,17 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
 
     // Game over by time
     if (s.timeLeft <= 0 && phase === 'playing') {
+      sounds.success();
+      haptics.successFeedback();
+      juice.flash('#FFFFFF', 0.6);
       setPhase('ended');
       return;
     }
 
     // --- RENDER ---
+    // Apply shake before all rendering
+    juice.applyShake(ctx);
+
     const depthPct = s.depth / MAX_DEPTH;
 
     // Background - fire gradient intensifying with depth
@@ -385,7 +442,9 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
     }
 
-    // Ambient embers
+    // Ambient embers with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const e of s.embers) {
       if (!e.active) continue;
       const alpha = Math.min(1, e.life);
@@ -394,8 +453,9 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(255,${Math.floor(100 + Math.random() * 100)},0,${alpha * 0.7})`;
       ctx.fill();
     }
+    ctx.restore();
 
-    // Obstacles
+    // Obstacles with glow
     for (const o of s.obstacles) {
       if (o.type === 'branch') {
         ctx.fillStyle = '#5C3D1E';
@@ -414,6 +474,8 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
           ctx.fill();
         }
         ctx.restore();
+        // Glow around fire obstacle
+        juice.drawGlow(ctx, o.x, o.y, 30, '#FF6600', 0.2);
       } else {
         ctx.beginPath();
         ctx.arc(o.x, o.y, o.width / 2, 0, Math.PI * 2);
@@ -423,11 +485,16 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
         grad.addColorStop(1, 'rgba(255,50,0,0)');
         ctx.fillStyle = grad;
         ctx.fill();
+        // Additive glow for embers
+        juice.drawGlow(ctx, o.x, o.y, o.width, '#FF4400', 0.3);
       }
     }
 
-    // Droplets
+    // Droplets with glow
     for (const d of s.droplets) {
+      // Glow behind droplet
+      juice.drawGlow(ctx, d.x, d.y, d.size * 3, '#00BFFF', 0.3);
+
       ctx.beginPath();
       ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
       const dropGrad = ctx.createRadialGradient(d.x - 1, d.y - 1, 0, d.x, d.y, d.size);
@@ -437,15 +504,26 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
       ctx.fill();
     }
 
-    // Parrot
+    // Parrot with glow
     const parrotY = h * 0.4;
     if (s.invincibleTimer > 0 && Math.floor(s.invincibleTimer * 10) % 2 === 0) {
       // Blink
     } else {
+      // Glow around parrot
+      const parrotColor = getParrotColor(s.depth);
+      if (parrotColor) {
+        juice.drawGlow(ctx, s.parrotX, parrotY, 50, `rgb(${parrotColor.r},${parrotColor.g},${parrotColor.b})`, 0.25);
+      } else {
+        // Rainbow glow
+        const hueGlow = (elapsed * 100) % 360;
+        juice.drawGlow(ctx, s.parrotX, parrotY, 60, `hsl(${hueGlow},80%,55%)`, 0.35);
+      }
       drawParrot(ctx, s.parrotX, parrotY, s.depth, elapsed);
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -454,8 +532,9 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
-    // Depth meter (right side)
+    // Depth meter (right side) with glow
     const meterX = w - 25;
     const meterTop = 60;
     const meterH = h * 0.6;
@@ -473,17 +552,18 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 1;
     ctx.strokeRect(meterX - 6, meterTop, 12, meterH);
-    // Depth label
-    ctx.font = '11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`${Math.floor(depthPct * 100)}%`, meterX, meterTop - 5);
 
-    // Multiplier
-    ctx.font = 'bold 18px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = depthPct > 0.7 ? '#FF00FF' : COLORS.gold;
-    ctx.fillText(`x${s.multiplier.toFixed(1)}`, w / 2, 70);
+    // Glow at depth indicator tip
+    if (depthFill > 5) {
+      juice.drawGlow(ctx, meterX, meterTop + depthFill, 15, depthPct > 0.7 ? '#FF00FF' : '#FFD700', 0.4);
+    }
+
+    // Depth label - neon
+    juice.drawNeonText(ctx, `${Math.floor(depthPct * 100)}%`, meterX, meterTop - 10, depthPct > 0.7 ? '#FF00FF' : '#FFD700', 11);
+
+    // Multiplier - neon
+    const multColor = depthPct > 0.7 ? '#FF00FF' : COLORS.gold;
+    juice.drawNeonText(ctx, `x${s.multiplier.toFixed(1)}`, w / 2, 70, multColor, 18);
 
     // Lives
     for (let i = 0; i < MAX_LIVES; i++) {
@@ -498,21 +578,39 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
       ctx.bezierCurveTo(10, -8, 7, -3, 0, 3);
       ctx.fillStyle = i < s.lives ? '#EF4444' : '#333';
       ctx.fill();
+      // Glow on active hearts
+      if (i < s.lives) {
+        ctx.shadowColor = '#EF4444';
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
       ctx.restore();
     }
 
-    // Score & timer
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 20, 40);
-    ctx.font = 'bold 24px sans-serif';
+    // Score - neon text
+    juice.drawNeonText(ctx, `Score: ${s.score}`, 90, 40, COLORS.white, 22);
+
+    // Timer - neon text
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.white;
+    ctx.save();
     ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 40, 40);
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, timerColor, 24);
+    ctx.restore();
+
+    // Screen flash overlay (from juice)
+    juice.drawFlash(ctx, w, h);
+
+    // Bloom effect at deeper depths
+    if (depthPct > 0.5) {
+      juice.applyBloom(ctx, w, h, (depthPct - 0.5) * 0.3);
+    }
+
+    // Update juice system
+    juice.update(delta);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+  }, [phase, sounds, haptics, juice, spawnParticles]));
 
   useEffect(() => { if (phase === 'ready') gameLoop.start(); }, [phase, gameLoop]);
 
@@ -522,6 +620,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
       s.score = 0; s.lives = MAX_LIVES; s.depth = 0; s.depthVelocity = 0;
       s.multiplier = 1; s.dropletsCollected = 0; s.obstacles = []; s.droplets = [];
       s.obstacleSpawnTimer = 0; s.dropletSpawnTimer = 0; s.invincibleTimer = 0;
+      s.lastWarningTime = 0;
       s.parrotX = window.innerWidth / 2; s.parrotTargetX = window.innerWidth / 2;
       gameLoop.reset(); gameLoop.start();
     }
@@ -531,37 +630,68 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', fontFamily: FONT_FAMILY }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
       {phase === 'ended' && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          background: 'rgba(0,0,0,0.75)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 8 }}>Transformation Complete!</div>
-          <div style={{ color: COLORS.gold, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{state.current.score}</div>
-          <div style={{ color: COLORS.gray, fontSize: 15, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.gold}, 0 0 40px ${COLORS.gold}80`,
+            fontFamily: FONT_FAMILY,
+          }}>Transformation Complete!</div>
+          <div style={{
+            color: COLORS.gold, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 30px ${COLORS.gold}, 0 0 60px ${COLORS.gold}80, 0 0 90px ${COLORS.gold}40`,
+            fontFamily: FONT_FAMILY,
+          }}>{state.current.score}</div>
+          <div style={{
+            color: COLORS.gray, fontSize: 15, marginBottom: 4,
+            textShadow: '0 0 8px rgba(255,255,255,0.3)',
+            fontFamily: FONT_FAMILY,
+          }}>
             Droplets collected: {state.current.dropletsCollected}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 13, marginBottom: 24 }}>
+          <div style={{
+            color: COLORS.gray, fontSize: 13, marginBottom: 24,
+            textShadow: '0 0 8px rgba(255,255,255,0.3)',
+            fontFamily: FONT_FAMILY,
+          }}>
             Scorched feathers become rainbow!
           </div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.mint, color: COLORS.primary, border: 'none',
+          <button onClick={() => { haptics.successFeedback(); sounds.chime(); onComplete(state.current.score); }} style={{
+            background: `linear-gradient(135deg, ${COLORS.mint}, ${COLORS.cyan})`,
+            color: COLORS.primary, border: 'none',
             padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+            boxShadow: `0 0 20px ${COLORS.mint}60, 0 0 40px ${COLORS.mint}30`,
+            textShadow: 'none',
+            fontFamily: FONT_FAMILY,
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+          <button onClick={() => { haptics.tapFeedback(); onBack(); }} style={{
+            background: 'rgba(255,255,255,0.08)',
+            color: COLORS.gray, border: `1px solid ${COLORS.gray}60`,
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            textShadow: '0 0 6px rgba(255,255,255,0.2)',
+            fontFamily: FONT_FAMILY,
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => { haptics.tapFeedback(); onBack(); }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+          fontFamily: FONT_FAMILY,
         }}>Back</button>
       )}
     </div>

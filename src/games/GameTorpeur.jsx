@@ -2,8 +2,11 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 const GAME_DURATION = 45;
 const ENERGY_DRAIN_RATE = 18;
 const ENERGY_REGEN_RATE = 12;
@@ -16,6 +19,11 @@ export default function GameTorpeur({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
+
+  const lastWarningTimeRef = useRef(-1);
+  const torporSoundCooldownRef = useRef(0);
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -78,14 +86,23 @@ export default function GameTorpeur({ onComplete, onBack }) {
 
   const handleHoldStart = useCallback(() => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        sounds.countdown(true);
+        haptics.tapFeedback();
+      }
       return;
     }
     const s = state.current;
     s.torpor = true;
     s.isFlying = false;
     s.torpidFlash = 0.3;
-  }, [phase]);
+    // Juice: flash blue when entering torpor
+    juice.flash('#0066FF', 0.3);
+    juice.shake(4, 0.15);
+    sounds.whoosh();
+    haptics.impactFeedback();
+  }, [phase, juice, sounds, haptics]);
 
   const handleHoldEnd = useCallback(() => {
     if (phase !== 'playing') return;
@@ -93,13 +110,20 @@ export default function GameTorpeur({ onComplete, onBack }) {
     s.torpor = false;
     s.isFlying = true;
     s.torpidFlash = 0.3;
-  }, [phase]);
+    // Juice: flash warm when resuming flight
+    juice.flash('#FF9900', 0.3);
+    juice.shake(3, 0.1);
+    sounds.wingflap();
+    haptics.tapFeedback();
+  }, [phase, juice, sounds, haptics]);
 
   const handleTap = useCallback(() => {
     if (phase === 'ready') {
       setPhase('playing');
+      sounds.countdown(true);
+      haptics.tapFeedback();
     }
-  }, [phase]);
+  }, [phase, sounds, haptics]);
 
   useTouch(canvasRef, { onTap: handleTap, onHoldStart: handleHoldStart, onHoldEnd: handleHoldEnd });
 
@@ -118,6 +142,9 @@ export default function GameTorpeur({ onComplete, onBack }) {
     const ctx = canvas.getContext('2d');
     ctx.save();
     ctx.scale(dpr, dpr);
+
+    // Apply screen shake
+    juice.applyShake(ctx);
 
     const s = state.current;
     const cx = w / 2;
@@ -161,24 +188,36 @@ export default function GameTorpeur({ onComplete, onBack }) {
       ctx.globalAlpha = 1;
       ctx.restore();
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Glow around the bird on ready screen
+      juice.drawGlow(ctx, cx, readyBirdY, 60, '#F5A623', 0.3);
+
+      // Neon title
+      juice.drawNeonText(ctx, 'Torpeur', cx, cy + 50, COLORS.gold, 28);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Torpeur', cx, cy + 50);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.cyan;
+      ctx.shadowColor = COLORS.cyan;
+      ctx.shadowBlur = 8;
       ctx.fillText('Hummingbird enters torpor at night:', cx, cy + 82);
-      ctx.fillText('3.3 C, -96% metabolism', cx, cy + 106);
-      ctx.font = '16px sans-serif';
+      ctx.fillText('3.3\u00B0C, -96% metabolism', cx, cy + 106);
+      ctx.shadowBlur = 0;
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('HOLD to rest, RELEASE to fly', cx, cy + 145);
       ctx.fillText("Don't run out of energy!", cx, cy + 168);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Neon pulsing "TAP TO START"
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 210);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 210, COLORS.mint, 20);
       ctx.globalAlpha = 1;
+
+      // Bloom on ready screen
+      juice.applyBloom(ctx, w, h, 0.08);
+
+      juice.update(delta);
       ctx.restore();
       return;
     }
@@ -214,6 +253,15 @@ export default function GameTorpeur({ onComplete, onBack }) {
     // Energy pulse
     if (s.energy < 20) {
       s.energyPulse = 0.5 + Math.sin(elapsed * 8) * 0.5;
+      // Warning haptics and sound when energy is critically low
+      if (s.energy < 10) {
+        torporSoundCooldownRef.current -= delta;
+        if (torporSoundCooldownRef.current <= 0) {
+          haptics.warningFeedback();
+          sounds.tick();
+          torporSoundCooldownRef.current = 1.0;
+        }
+      }
     } else {
       s.energyPulse = 0;
     }
@@ -255,15 +303,34 @@ export default function GameTorpeur({ onComplete, onBack }) {
       if (p.life <= 0) p.active = false;
     }
 
+    // Warning sound on last 5 seconds
+    if (s.timeLeft <= 5 && s.timeLeft > 0) {
+      const sec = Math.ceil(s.timeLeft);
+      if (sec !== lastWarningTimeRef.current) {
+        lastWarningTimeRef.current = sec;
+        sounds.tick();
+        haptics.warningFeedback();
+      }
+    }
+
     // Game over conditions
     if (s.energy <= 0 && phase === 'playing') {
       setPhase('ended');
       setDisplayScore(Math.round(s.score));
+      // Juice on energy depletion
+      juice.shake(12, 0.5);
+      juice.flash('#EF4444', 0.5);
+      sounds.fail();
+      haptics.failFeedback();
       return;
     }
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
       setDisplayScore(Math.round(s.score));
+      // Juice on time's up
+      juice.flash('#F5A623', 0.4);
+      sounds.success();
+      haptics.successFeedback();
       return;
     }
 
@@ -313,7 +380,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
     const celestialY = 60 + t * 40;
     const celestialR = 30;
     if (t < 0.5) {
-      // Sun
+      // Sun with glow
       const sunGrad = ctx.createRadialGradient(w * 0.8, celestialY, 0, w * 0.8, celestialY, celestialR * 2);
       sunGrad.addColorStop(0, `rgba(255,200,50,${1 - t * 2})`);
       sunGrad.addColorStop(0.5, `rgba(255,150,30,${(1 - t * 2) * 0.5})`);
@@ -326,8 +393,10 @@ export default function GameTorpeur({ onComplete, onBack }) {
       ctx.arc(w * 0.8, celestialY, celestialR * (1 - t), 0, Math.PI * 2);
       ctx.fillStyle = `rgba(255,220,100,${1 - t * 2})`;
       ctx.fill();
+      // Additive sun glow
+      juice.drawGlow(ctx, w * 0.8, celestialY, celestialR * 3, '#FFAA00', (1 - t * 2) * 0.2);
     } else {
-      // Moon
+      // Moon with glow
       const moonAlpha = (t - 0.5) * 2;
       ctx.beginPath();
       ctx.arc(w * 0.8, celestialY, celestialR * 0.8, 0, Math.PI * 2);
@@ -337,6 +406,8 @@ export default function GameTorpeur({ onComplete, onBack }) {
       ctx.arc(w * 0.8 - 5, celestialY - 5, 5, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(170,180,200,${moonAlpha * 0.3})`;
       ctx.fill();
+      // Additive moon glow
+      juice.drawGlow(ctx, w * 0.8, celestialY, celestialR * 2, '#AABBFF', moonAlpha * 0.25);
     }
 
     // Snowflakes
@@ -392,6 +463,13 @@ export default function GameTorpeur({ onComplete, onBack }) {
     // Hummingbird
     const bx = cx;
     const by = cy + s.birdY;
+
+    // Glow around the bird (warm when flying, cool when torpid)
+    if (s.isFlying) {
+      juice.drawGlow(ctx, bx, by, 50, '#F5A623', 0.25);
+    } else {
+      juice.drawGlow(ctx, bx, by, 40, '#0066FF', 0.15 + Math.sin(elapsed * 1.5) * 0.05);
+    }
 
     ctx.save();
     ctx.translate(bx, by);
@@ -478,18 +556,23 @@ export default function GameTorpeur({ onComplete, onBack }) {
     // Zzz in torpor
     if (s.torpor) {
       const zzAlpha = 0.3 + Math.sin(elapsed * 1.5) * 0.2;
-      ctx.font = 'bold 16px sans-serif';
+      ctx.font = `bold 16px ${FONT_FAMILY}`;
       ctx.fillStyle = `rgba(150,180,255,${zzAlpha})`;
+      ctx.shadowColor = '#6699FF';
+      ctx.shadowBlur = 8;
       ctx.fillText('z', 35, -20 - Math.sin(elapsed) * 5);
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = `bold 12px ${FONT_FAMILY}`;
       ctx.fillText('z', 42, -28 - Math.sin(elapsed + 0.5) * 5);
-      ctx.font = 'bold 9px sans-serif';
+      ctx.font = `bold 9px ${FONT_FAMILY}`;
       ctx.fillText('z', 48, -34 - Math.sin(elapsed + 1) * 5);
+      ctx.shadowBlur = 0;
     }
 
     ctx.restore();
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -498,6 +581,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha * 0.6})`;
       ctx.fill();
     }
+    ctx.restore();
 
     // --- HUD ---
     // Energy bar
@@ -519,26 +603,28 @@ export default function GameTorpeur({ onComplete, onBack }) {
     ctx.roundRect(barX, barY, barW * energyFrac, barH, 7);
     ctx.fill();
 
-    ctx.font = '12px sans-serif';
+    // Glow on energy bar when low
+    if (s.energy < 20) {
+      juice.drawGlow(ctx, barX + barW * energyFrac * 0.5, barY + barH / 2, 40, '#EF4444', s.energyPulse * 0.2);
+    }
+
+    // Neon energy label
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = COLORS.white;
+    ctx.shadowColor = s.energy < 20 ? COLORS.red : COLORS.white;
+    ctx.shadowBlur = s.energy < 20 ? 10 : 4;
     ctx.fillText(`Energy: ${Math.round(s.energy)}%`, cx, barY - 6);
+    ctx.shadowBlur = 0;
 
-    // Temperature
-    ctx.font = '14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = s.torpor ? COLORS.cyan : COLORS.gold;
-    ctx.fillText(`${s.temperature.toFixed(1)} C`, cx, barY + barH + 18);
+    // Temperature with neon glow
+    juice.drawNeonText(ctx, `${s.temperature.toFixed(1)}\u00B0C`, cx, barY + barH + 18, s.torpor ? COLORS.cyan : COLORS.gold, 14);
 
-    // State indicator
-    ctx.font = 'bold 18px sans-serif';
-    ctx.textAlign = 'center';
+    // State indicator - neon text
     if (s.isFlying) {
-      ctx.fillStyle = COLORS.gold;
-      ctx.fillText('FLYING', cx, 80);
+      juice.drawNeonText(ctx, 'FLYING', cx, 80, COLORS.gold, 18);
     } else {
-      ctx.fillStyle = COLORS.cyan;
-      ctx.fillText('TORPOR', cx, 80);
+      juice.drawNeonText(ctx, 'TORPOR', cx, 80, COLORS.cyan, 18);
       // Frost overlay on edges
       ctx.fillStyle = `rgba(150,200,255,${t * 0.08})`;
       ctx.fillRect(0, 0, 30, h);
@@ -551,20 +637,40 @@ export default function GameTorpeur({ onComplete, onBack }) {
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : (s.isFlying ? COLORS.gold : COLORS.cyan);
+    const timerColor = s.timeLeft < 5 ? COLORS.red : (s.isFlying ? COLORS.gold : COLORS.cyan);
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
 
-    // Timer + score
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Glow at end of timer bar
+    if (s.timeLeft < 5) {
+      juice.drawGlow(ctx, w * timerFrac, 2, 20, COLORS.red, 0.4);
+    }
+
+    // Timer + score - neon
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, s.timeLeft < 5 ? COLORS.red : COLORS.white, 24);
+
+    ctx.save();
     ctx.textAlign = 'left';
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
+    ctx.shadowColor = COLORS.gold;
+    ctx.shadowBlur = 12;
     ctx.fillStyle = COLORS.white;
     ctx.fillText(`Score: ${Math.round(s.score)}`, 20, 40);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Screen flash overlay from juice
+    juice.drawFlash(ctx, w, h);
+
+    // Bloom effect - subtle during flight, more during torpor
+    const bloomIntensity = s.isFlying ? 0.06 : 0.1 * t;
+    juice.applyBloom(ctx, w, h, bloomIntensity);
+
+    // Update juice state
+    juice.update(delta);
 
     ctx.restore();
-  }, [phase, spawnParticles]));
+  }, [phase, spawnParticles, juice, sounds, haptics]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -582,6 +688,8 @@ export default function GameTorpeur({ onComplete, onBack }) {
       s.temperature = 37;
       s.birdY = 0;
       s.birdVy = 0;
+      lastWarningTimeRef.current = -1;
+      torporSoundCooldownRef.current = 0;
       gameLoop.reset();
       gameLoop.start();
     }
@@ -593,6 +701,8 @@ export default function GameTorpeur({ onComplete, onBack }) {
 
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
+  const isEnergyDeath = state.current.energy <= 0;
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
@@ -600,31 +710,96 @@ export default function GameTorpeur({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 12 }}>
-            {state.current.energy <= 0 ? 'Out of Energy!' : "Time's Up!"}
+          <div style={{
+            color: isEnergyDeath ? COLORS.red : COLORS.white,
+            fontSize: 28,
+            fontWeight: 'bold',
+            marginBottom: 12,
+            textShadow: isEnergyDeath
+              ? `0 0 20px ${COLORS.red}, 0 0 40px ${COLORS.red}`
+              : `0 0 15px ${COLORS.gold}, 0 0 30px ${COLORS.gold}`,
+          }}>
+            {isEnergyDeath ? 'Out of Energy!' : "Time's Up!"}
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{displayScore}</div>
-          <div style={{ color: COLORS.gray, fontSize: 16, marginBottom: 4 }}>flying time score</div>
-          <div style={{ color: COLORS.cyan, fontSize: 14, marginBottom: 24 }}>
-            Hummingbirds drop to 3.3 C in torpor!
+          <div style={{
+            color: COLORS.gold,
+            fontSize: 48,
+            fontWeight: 'bold',
+            marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.gold}, 0 0 40px ${COLORS.gold}, 0 0 60px ${COLORS.gold}`,
+          }}>
+            {displayScore}
           </div>
-          <button onClick={() => onComplete(Math.round(state.current.score))} style={{
-            background: COLORS.gold, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 16,
+            marginBottom: 4,
+            textShadow: `0 0 6px ${COLORS.gray}`,
+          }}>
+            flying time score
+          </div>
+          <div style={{
+            color: COLORS.cyan,
+            fontSize: 14,
+            marginBottom: 24,
+            textShadow: `0 0 10px ${COLORS.cyan}`,
+          }}>
+            Hummingbirds drop to 3.3\u00B0C in torpor!
+          </div>
+          <button onClick={() => {
+            sounds.chime();
+            haptics.tapFeedback();
+            onComplete(Math.round(state.current.score));
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.gold}, #c07818)`,
+            color: COLORS.primary,
+            border: 'none',
+            padding: '14px 40px',
+            borderRadius: 12,
+            fontSize: 18,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.gold}80, 0 4px 15px rgba(0,0,0,0.3)`,
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+          <button onClick={() => {
+            sounds.tick();
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.05)',
+            color: COLORS.gray,
+            border: `1px solid ${COLORS.gray}50`,
+            padding: '10px 30px',
+            borderRadius: 12,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            boxShadow: `0 0 10px rgba(255,255,255,0.05)`,
+            textShadow: `0 0 6px ${COLORS.gray}`,
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
         }}>Back</button>
       )}
     </div>
