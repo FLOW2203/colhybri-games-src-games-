@@ -2,8 +2,11 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 const GAME_DURATION = 15;
 const POOL_SIZE = 100;
 const FRUIT_COLORS = [
@@ -20,6 +23,8 @@ export default function GameLancerFruits({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -126,7 +131,11 @@ export default function GameLancerFruits({ onComplete, onBack }) {
 
   const handleTap = useCallback(() => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        haptics.tapFeedback();
+        sounds.pop();
+        setPhase('playing');
+      }
       return;
     }
     const s = state.current;
@@ -147,6 +156,12 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       s.feedbackTimer = 0.5;
       spawnParticles(f.x, f.y, 10, 46, 234, 163);
       sounds.chime();
+      haptics.impactFeedback();
+      juice.flash('#2EEAA3', 0.3);
+      if (s.streak > 3) {
+        sounds.combo(s.streak);
+        haptics.comboFeedback(Math.min(s.streak, 5));
+      }
       setDisplayScore(s.score);
 
       // Setup next throw after brief delay
@@ -164,8 +179,9 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       f.flyProgress = 0;
       s.canThrow = false;
       sounds.whoosh();
+      haptics.tapFeedback();
     }
-  }, [phase, sounds, spawnParticles, setupFruit]);
+  }, [phase, sounds, haptics, juice, spawnParticles, setupFruit]);
 
   const handleSwipe = useCallback((direction) => {
     if (phase !== 'playing') return;
@@ -183,9 +199,10 @@ export default function GameLancerFruits({ onComplete, onBack }) {
         f.flyProgress = 0;
         s.canThrow = false;
         sounds.whoosh();
+        haptics.tapFeedback();
       }
     }
-  }, [phase, sounds]);
+  }, [phase, sounds, haptics]);
 
   useTouch(canvasRef, { onTap: handleTap, onSwipe: handleSwipe });
 
@@ -286,6 +303,9 @@ export default function GameLancerFruits({ onComplete, onBack }) {
     const cx = w / 2;
     const cy = h / 2;
 
+    // Update juice effects each frame
+    juice.update(delta);
+
     if (phase === 'ready') {
       const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
       bgGrad.addColorStop(0, '#0b3d0b');
@@ -294,26 +314,32 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, w, h);
 
+      // Glow behind toucans on ready screen
+      juice.drawGlow(ctx, w * 0.2, cy, 80, '#FF6B35', 0.2);
+      juice.drawGlow(ctx, w * 0.8, cy, 80, '#e74c3c', 0.2);
+
       drawToucan(ctx, w * 0.2, cy, 'right', elapsed * 2, '#FF6B35');
       drawToucan(ctx, w * 0.8, cy, 'left', elapsed * 2 + 1, '#e74c3c');
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Lancer de Fruits', cx, cy - 80, COLORS.mint, 28);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Lancer de Fruits', cx, cy - 80);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.gold;
       ctx.fillText('Toucans toss fruit as', cx, cy - 40);
       ctx.fillText('a courtship ritual!', cx, cy - 16);
-      ctx.font = '16px sans-serif';
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Swipe to throw, tap to catch!', cx, cy + 80);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing neon "TAP TO START"
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
+      ctx.save();
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 130);
-      ctx.globalAlpha = 1;
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 130, COLORS.gold, 20);
+      ctx.restore();
+
       ctx.restore();
       return;
     }
@@ -322,6 +348,11 @@ export default function GameLancerFruits({ onComplete, onBack }) {
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     s.leftToucanBob = elapsed * 2.5;
     s.rightToucanBob = elapsed * 2.5 + 1;
+
+    // Low time warning haptic
+    if (s.timeLeft <= 3 && s.timeLeft > 0 && Math.floor(s.timeLeft * 2) !== Math.floor((s.timeLeft + delta) * 2)) {
+      haptics.warningFeedback();
+    }
 
     const f = s.fruit;
 
@@ -344,6 +375,8 @@ export default function GameLancerFruits({ onComplete, onBack }) {
         f.flying = false;
         spawnParticles(f.endX, f.endY, 8, 245, 166, 35);
         sounds.tick();
+        haptics.tapFeedback();
+        juice.shake(4, 0.15);
 
         // Auto-return after short delay
         setTimeout(() => {
@@ -389,6 +422,12 @@ export default function GameLancerFruits({ onComplete, onBack }) {
         s.missFlash = 0.3;
         s.canCatch = false;
 
+        // Juice: shake + red flash + fail sound + haptic
+        juice.shake(10, 0.3);
+        juice.flash('#EF4444', 0.4);
+        sounds.fail();
+        haptics.failFeedback();
+
         setTimeout(() => setupFruit(w, h), 400);
       }
     }
@@ -428,10 +467,17 @@ export default function GameLancerFruits({ onComplete, onBack }) {
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
       setDisplayScore(s.score);
+      sounds.success();
+      haptics.successFeedback();
+      juice.shake(6, 0.4);
+      juice.flash('#FFD700', 0.5);
       return;
     }
 
     // --- RENDER ---
+    // Apply shake before drawing
+    juice.applyShake(ctx);
+
     const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
     bgGrad.addColorStop(0, '#0b3d0b');
     bgGrad.addColorStop(0.4, '#1a5c1a');
@@ -452,11 +498,14 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       ctx.restore();
     }
 
-    // Miss flash
+    // Miss flash (original)
     if (s.missFlash > 0) {
       ctx.fillStyle = `rgba(239,68,68,${s.missFlash * 0.3})`;
       ctx.fillRect(0, 0, w, h);
     }
+
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
 
     // Branches
     ctx.strokeStyle = '#5a3a1a';
@@ -470,6 +519,10 @@ export default function GameLancerFruits({ onComplete, onBack }) {
     ctx.quadraticCurveTo(w * 0.85, cy + 30, w * 0.7, cy + 45);
     ctx.stroke();
 
+    // Glow behind toucans
+    juice.drawGlow(ctx, w * 0.15, cy, 60, '#FF6B35', 0.15);
+    juice.drawGlow(ctx, w * 0.85, cy, 60, '#e74c3c', 0.15);
+
     // Toucans
     drawToucan(ctx, w * 0.15, cy, 'right', s.leftToucanBob, '#FF6B35');
     drawToucan(ctx, w * 0.85, cy, 'left', s.rightToucanBob, '#e74c3c');
@@ -477,18 +530,22 @@ export default function GameLancerFruits({ onComplete, onBack }) {
     // Catch indicator
     if (s.canCatch && f.waitingCatch) {
       const indicatorAlpha = 0.5 + Math.sin(elapsed * 12) * 0.5;
+      // Glow pulse around catch zone
+      juice.drawGlow(ctx, w * 0.18, h * 0.42, 50, '#2EEAA3', indicatorAlpha * 0.3);
       ctx.beginPath();
       ctx.arc(w * 0.18, h * 0.42, 35, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(46,234,163,${indicatorAlpha})`;
       ctx.lineWidth = 3;
       ctx.stroke();
-      ctx.font = 'bold 14px sans-serif';
+      ctx.font = `bold 14px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = `rgba(46,234,163,${indicatorAlpha})`;
       ctx.fillText('TAP!', w * 0.18, h * 0.42 + 50);
     }
 
-    // Trail particles
+    // Trail particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.trailParticles) {
       if (!p.active) continue;
       const alpha = (p.life / p.maxLife) * 0.6;
@@ -497,6 +554,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
     // Draw fruit
     if (f.active) {
@@ -505,14 +563,8 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       ctx.translate(f.x, f.y);
       ctx.rotate(f.rotation);
 
-      // Glow
-      const glowGrad = ctx.createRadialGradient(0, 0, f.size * 0.5, 0, 0, f.size * 2);
-      glowGrad.addColorStop(0, `${fc.fill}33`);
-      glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = glowGrad;
-      ctx.beginPath();
-      ctx.arc(0, 0, f.size * 2, 0, Math.PI * 2);
-      ctx.fill();
+      // Glow behind fruit using juice
+      juice.drawGlow(ctx, 0, 0, f.size * 2.5, fc.fill, 0.35);
 
       // Fruit body
       ctx.beginPath();
@@ -541,7 +593,9 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       ctx.restore();
     }
 
-    // Burst particles
+    // Burst particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -550,52 +604,56 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
-    // Speed indicator
+    // Speed indicator - neon text
     if (s.speed > 1.1) {
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.gold;
-      ctx.fillText(`Speed x${s.speed.toFixed(1)}`, cx, 80);
+      juice.drawNeonText(ctx, `Speed x${s.speed.toFixed(1)}`, cx, 80, COLORS.gold, 18);
     }
 
-    // Streak
+    // Streak - neon text
     if (s.streak > 1) {
-      ctx.font = 'bold 22px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.mint;
-      ctx.fillText(`Streak: ${s.streak}`, cx, 110);
+      juice.drawNeonText(ctx, `Streak: ${s.streak}`, cx, 110, COLORS.mint, 22);
     }
 
     // Feedback
     if (s.feedbackTimer > 0) {
       const alpha = Math.min(1, s.feedbackTimer * 2);
+      ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.font = 'bold 30px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = s.feedbackText === 'Miss!' ? COLORS.red : COLORS.mint;
-      ctx.fillText(s.feedbackText, cx, cy - 60);
-      ctx.globalAlpha = 1;
+      const feedbackColor = s.feedbackText === 'Miss!' ? COLORS.red : COLORS.mint;
+      juice.drawNeonText(ctx, s.feedbackText, cx, cy - 60, feedbackColor, 30);
+      ctx.restore();
     }
 
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.green;
+    const timerColor = s.timeLeft < 3 ? COLORS.red : COLORS.green;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
+    // Glow on timer bar edge
+    if (timerFrac > 0.01) {
+      juice.drawGlow(ctx, w * timerFrac, 2, 15, timerColor, 0.4);
+    }
 
-    // Timer + score
-    ctx.font = 'bold 24px sans-serif';
+    // Timer + score - neon text
+    ctx.save();
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
     ctx.textAlign = 'right';
+    ctx.shadowColor = s.timeLeft < 3 ? COLORS.red : COLORS.white;
+    ctx.shadowBlur = 10;
     ctx.fillStyle = s.timeLeft < 3 ? COLORS.red : COLORS.white;
     ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
     ctx.textAlign = 'left';
+    ctx.shadowColor = COLORS.mint;
     ctx.fillStyle = COLORS.white;
     ctx.fillText(`Score: ${s.score}`, 20, 40);
+    ctx.restore();
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, spawnTrail, setupFruit, drawToucan]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnTrail, setupFruit, drawToucan]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -628,30 +686,67 @@ export default function GameLancerFruits({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 12 }}>Time's Up!</div>
-          <div style={{ color: COLORS.green, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{displayScore}</div>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 12,
+            textShadow: `0 0 20px ${COLORS.gold}, 0 0 40px ${COLORS.gold}`,
+          }}>Time's Up!</div>
+          <div style={{
+            color: COLORS.green, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.green}, 0 0 40px ${COLORS.green}80`,
+          }}>{displayScore}</div>
           <div style={{ color: COLORS.gray, fontSize: 16, marginBottom: 4 }}>exchanges completed</div>
-          <div style={{ color: COLORS.gold, fontSize: 14, marginBottom: 4 }}>Best Streak: {state.current.bestStreak}</div>
+          <div style={{
+            color: COLORS.gold, fontSize: 14, marginBottom: 4,
+            textShadow: `0 0 10px ${COLORS.gold}80`,
+          }}>Best Streak: {state.current.bestStreak}</div>
           <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>
             Toucans toss fruit to show love!
           </div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.green, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <button onClick={() => {
+            sounds.pop();
+            haptics.tapFeedback();
+            onComplete(state.current.score);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.mint})`,
+            color: COLORS.primary, border: 'none',
+            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
+            cursor: 'pointer', marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+            boxShadow: `0 0 20px ${COLORS.green}60, 0 4px 15px rgba(0,0,0,0.3)`,
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+          <button onClick={() => {
+            sounds.pop();
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.05)',
+            color: COLORS.gray,
+            border: `1px solid ${COLORS.gray}50`,
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          sounds.pop();
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>

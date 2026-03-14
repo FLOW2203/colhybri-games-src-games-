@@ -2,12 +2,15 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 45;
 const POOL_SIZE = 100;
 const WIND_INTERVAL = 8;
 const MATERIAL_TYPES = ['twig', 'leaf', 'moss', 'flower'];
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 export default function GameNidDukdukdiya({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -16,6 +19,8 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
   const [displayTime, setDisplayTime] = useState(GAME_DURATION);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     score: 0,
@@ -75,10 +80,11 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
     const moveAmt = 40;
     if (direction === 'left') s.nestX = Math.max(s.nestWidth / 2, s.nestX - moveAmt);
     if (direction === 'right') s.nestX = Math.min(w - s.nestWidth / 2, s.nestX + moveAmt);
-  }, [phase]);
+    haptics.tapFeedback();
+  }, [phase, haptics]);
 
   const handleTap = useCallback(() => {
-    if (phase === 'ready') { setPhase('playing'); return; }
+    if (phase === 'ready') { setPhase('playing'); sounds.countdown(true); return; }
     if (phase !== 'playing') return;
     const s = state.current;
     // Weave caught materials
@@ -96,6 +102,8 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
 
       spawnParticles(s.nestX, s.nestY, 8, 245, 200, 100);
       sounds.chime();
+      haptics.impactFeedback();
+      juice.flash('#22C55E', 0.15);
 
       // Diversity bonus
       if (s.typesCollected.size >= 4 && !s.diversityBonusGiven) {
@@ -104,14 +112,21 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
         s.solidarityGauge = Math.min(100, s.solidarityGauge + 15);
         setDisplayScore(s.score);
         spawnParticles(s.nestX, s.nestY, 20, 233, 30, 140);
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#E91E8C', 0.3);
+        juice.shake(6, 0.3);
       }
+    } else {
+      haptics.tapFeedback();
     }
-  }, [phase, sounds, spawnParticles]);
+  }, [phase, sounds, spawnParticles, haptics, juice]);
 
   const handleHoldStart = useCallback(() => {
     if (phase !== 'playing') return;
     state.current.isHolding = true;
-  }, [phase]);
+    haptics.tapFeedback();
+  }, [phase, haptics]);
 
   const handleHoldEnd = useCallback(() => {
     state.current.isHolding = false;
@@ -201,27 +216,46 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
     if (phase === 'ready') {
       ctx.fillStyle = '#1A1020';
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+
+      // Glow behind title
+      juice.drawGlow(ctx, w / 2, h / 2 - 70, 120, '#F5A623', 0.25);
+
+      // Neon title
+      juice.drawNeonText(ctx, 'Nid de Dukdukdiya', w / 2, h / 2 - 70, '#F5A623', 26);
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Nid de Dukdukdiya', w / 2, h / 2 - 70);
-      ctx.font = '16px sans-serif';
+      ctx.shadowColor = COLORS.mint;
+      ctx.shadowBlur = 8;
       ctx.fillStyle = COLORS.mint;
       ctx.fillText('Dukdukdiya builds with love', w / 2, h / 2 - 20);
-      ctx.font = '14px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `14px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('SWIPE L/R: move nest', w / 2, h / 2 + 30);
       ctx.fillText('TAP: weave material into nest', w / 2, h / 2 + 52);
       ctx.fillText('HOLD: shield against wind', w / 2, h / 2 + 74);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillText('TAP TO START', w / 2, h / 2 + 120);
+
+      // Pulsing start text
+      const pulse = 0.6 + 0.4 * Math.sin(elapsed * 4);
+      ctx.globalAlpha = pulse;
+      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.mint, 20);
+      ctx.globalAlpha = 1;
+
       ctx.restore();
+      juice.update(delta);
       return;
     }
 
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     setDisplayTime(Math.ceil(s.timeLeft));
+
+    // Low time warning haptic
+    if (s.timeLeft <= 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.countdown(s.timeLeft <= 1);
+    }
 
     // Spawn materials
     s.materialSpawnTimer += delta;
@@ -247,6 +281,8 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
       s.windDirection = Math.random() > 0.5 ? 1 : -1;
       s.windTimer = 0;
       sounds.whoosh();
+      haptics.impactFeedback();
+      juice.shake(5, 0.4);
     }
     if (s.windActive) {
       s.windDuration += delta;
@@ -274,10 +310,12 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
           mat.x >= s.nestX - s.nestWidth / 2 - 5 && mat.x <= s.nestX + s.nestWidth / 2 + 5) {
         s.caughtMaterials.push(mat);
         s.fallingMaterials.splice(i, 1);
-        sounds.tick();
+        sounds.pop();
+        haptics.tapFeedback();
+        spawnParticles(mat.x, mat.y, 4, 255, 220, 100);
         continue;
       }
-      // Off screen
+      // Off screen — missed material
       if (mat.y > h + 20 || mat.x < -30 || mat.x > w + 30) {
         s.fallingMaterials.splice(i, 1);
       }
@@ -290,6 +328,10 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
         lost.vx = s.windDirection * 100;
         lost.y = s.nestY - 10;
         s.fallingMaterials.push(lost);
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#EF4444', 0.2);
+        juice.shake(4, 0.2);
       }
     }
 
@@ -305,12 +347,23 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
     // Game over
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
+      if (s.score >= 80) {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#22C55E', 0.4);
+      } else {
+        sounds.fail();
+        haptics.heavyFeedback();
+        juice.flash('#EF4444', 0.3);
+      }
+      juice.shake(8, 0.4);
       return;
     }
 
     // --- RENDER ---
     ctx.save();
     ctx.translate(s.shakeOffset, 0);
+    juice.applyShake(ctx);
 
     // Sunset background
     const sunsetGrad = ctx.createLinearGradient(0, 0, 0, h);
@@ -322,12 +375,13 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
     ctx.fillStyle = sunsetGrad;
     ctx.fillRect(-10, 0, w + 20, h);
 
-    // Sun
+    // Sun with glow
     const sunGrad = ctx.createRadialGradient(w * 0.7, h * 0.15, 10, w * 0.7, h * 0.15, 80);
     sunGrad.addColorStop(0, 'rgba(255,220,100,0.8)');
     sunGrad.addColorStop(1, 'rgba(255,150,50,0)');
     ctx.fillStyle = sunGrad;
     ctx.fillRect(w * 0.5, 0, w * 0.4, h * 0.35);
+    juice.drawGlow(ctx, w * 0.7, h * 0.15, 100, '#FFDC64', 0.3);
 
     // Branch
     ctx.strokeStyle = '#5C3D1E';
@@ -350,6 +404,9 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
     const nestH = 15 + s.nestLayers * 5;
     ctx.save();
     ctx.translate(s.nestX, s.nestY);
+
+    // Glow under nest
+    juice.drawGlow(ctx, 0, 0, nestW * 0.9, '#F5A623', 0.2);
 
     // Nest bowl shape
     ctx.beginPath();
@@ -377,25 +434,27 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
 
     ctx.restore();
 
-    // Caught materials indicator (above nest)
+    // Caught materials indicator (above nest) — neon style
     if (s.caughtMaterials.length > 0) {
-      ctx.font = 'bold 14px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#FFE066';
-      ctx.fillText(`${s.caughtMaterials.length} caught - TAP to weave!`, s.nestX, s.nestY - 30);
+      juice.drawGlow(ctx, s.nestX, s.nestY - 35, 40, '#FFE066', 0.25);
+      juice.drawNeonText(ctx, `${s.caughtMaterials.length} caught - TAP to weave!`, s.nestX, s.nestY - 30, '#FFE066', 14);
     }
 
-    // Falling materials
+    // Falling materials with glow
     for (const mat of s.fallingMaterials) {
       ctx.save();
       ctx.translate(mat.x, mat.y);
       ctx.rotate(mat.rotation);
+      // Subtle glow behind falling items
+      const glowColor = mat.type === 'flower' ? '#E91E8C' : mat.type === 'leaf' ? '#22C55E' : mat.type === 'moss' ? '#4CAF50' : '#F5A623';
+      juice.drawGlow(ctx, 0, 0, 18, glowColor, 0.15);
       drawMaterial(ctx, mat, 0, 0);
       ctx.restore();
     }
 
-    // Shield indicator
+    // Shield indicator with glow
     if (s.isHolding) {
+      juice.drawGlow(ctx, s.nestX, s.nestY - 10, nestW * 1.2, '#64C8FF', 0.3);
       ctx.beginPath();
       ctx.arc(s.nestX, s.nestY - 10, nestW * 0.8, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(100,200,255,0.5)';
@@ -405,12 +464,12 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
       ctx.fill();
     }
 
-    // Wind indicator
+    // Wind indicator — neon text
     if (s.windActive) {
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.5 * Math.sin(elapsed * 8)})`;
-      ctx.fillText(s.windDirection > 0 ? 'WIND →→→' : '←←← WIND', w / 2, h * 0.2);
+      const windAlpha = 0.5 + 0.5 * Math.sin(elapsed * 8);
+      ctx.globalAlpha = windAlpha;
+      juice.drawNeonText(ctx, s.windDirection > 0 ? 'WIND \u2192\u2192\u2192' : '\u2190\u2190\u2190 WIND', w / 2, h * 0.2, '#00D4FF', 18);
+      ctx.globalAlpha = 1;
       // Wind lines
       for (let i = 0; i < 8; i++) {
         const lx = (w * (i / 8) + elapsed * 200 * s.windDirection) % w;
@@ -424,7 +483,9 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
       }
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -433,10 +494,14 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
     ctx.restore(); // shake
 
-    // Solidarity gauge
+    // Draw screen flash
+    juice.drawFlash(ctx, w, h);
+
+    // Solidarity gauge with glow
     const gaugeW = w * 0.5;
     const gaugeH = 14;
     const gaugeX = (w - gaugeW) / 2;
@@ -448,38 +513,48 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
     gaugeGrad.addColorStop(0.5, '#F5A623');
     gaugeGrad.addColorStop(1, '#22C55E');
     ctx.fillStyle = gaugeGrad;
-    ctx.fillRect(gaugeX, gaugeY, gaugeW * (s.solidarityGauge / 100), gaugeH);
+    const gaugeFill = gaugeW * (s.solidarityGauge / 100);
+    ctx.fillRect(gaugeX, gaugeY, gaugeFill, gaugeH);
+    // Glow at gauge tip
+    if (s.solidarityGauge > 5) {
+      juice.drawGlow(ctx, gaugeX + gaugeFill, gaugeY + gaugeH / 2, 15, '#F5A623', 0.35);
+    }
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 1;
     ctx.strokeRect(gaugeX, gaugeY, gaugeW, gaugeH);
-    ctx.font = '12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Solidarity: ${Math.floor(s.solidarityGauge)}%`, w / 2, gaugeY - 5);
+
+    // Solidarity label — neon
+    juice.drawNeonText(ctx, `Solidarity: ${Math.floor(s.solidarityGauge)}%`, w / 2, gaugeY - 8, '#F5A623', 12);
 
     // Types collected
-    ctx.font = '12px sans-serif';
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
-    const typeIcons = { twig: '🪵', leaf: '🍃', moss: '🌿', flower: '🌸' };
+    const typeIcons = { twig: '\uD83E\uDEB5', leaf: '\uD83C\uDF43', moss: '\uD83C\uDF3F', flower: '\uD83C\uDF38' };
     let tx = 20;
     for (const t of MATERIAL_TYPES) {
       ctx.fillStyle = s.typesCollected.has(t) ? COLORS.white : 'rgba(255,255,255,0.3)';
-      ctx.fillText(typeIcons[t] + (s.typesCollected.has(t) ? ' ✓' : ''), tx, h * 0.88);
+      ctx.fillText(typeIcons[t] + (s.typesCollected.has(t) ? ' \u2713' : ''), tx, h * 0.88);
       tx += 55;
     }
 
-    // Score & timer
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 20, 40);
-    ctx.font = 'bold 24px sans-serif';
+    // Score — neon text
+    juice.drawNeonText(ctx, `Score: ${s.score}`, 70, 40, COLORS.mint, 22);
+
+    // Timer — neon with red glow when low
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.white;
+    ctx.save();
     ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 20, 40, timerColor, 24);
+    ctx.restore();
+    if (s.timeLeft < 5) {
+      juice.drawGlow(ctx, w - 30, 40, 30, COLORS.red, 0.3 + 0.2 * Math.sin(elapsed * 8));
+    }
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles]));
+
+    // Update juice system
+    juice.update(delta);
+  }, [phase, sounds, spawnParticles, haptics, juice]));
 
   useEffect(() => { if (phase === 'ready') gameLoop.start(); }, [phase, gameLoop]);
 
@@ -497,6 +572,10 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
   useEffect(() => { if (phase === 'ended') gameLoop.stop(); }, [phase, gameLoop]);
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
+  const finalScore = state.current.score;
+  const finalSolidarity = Math.floor(state.current.solidarityGauge);
+  const isHighScore = finalScore >= 80;
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
@@ -504,31 +583,63 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 30, fontWeight: 'bold', marginBottom: 8 }}>Nest Complete!</div>
-          <div style={{ color: COLORS.gold, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{state.current.score}</div>
-          <div style={{ color: COLORS.gray, fontSize: 15, marginBottom: 4 }}>
-            Solidarity: {Math.floor(state.current.solidarityGauge)}%
+          <div style={{
+            color: COLORS.white, fontSize: 30, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 20px ${isHighScore ? COLORS.mint : COLORS.gold}, 0 0 40px ${isHighScore ? COLORS.mint : COLORS.gold}50`,
+          }}>
+            Nest Complete!
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 13, marginBottom: 24 }}>
+          <div style={{
+            color: COLORS.gold, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.gold}, 0 0 40px ${COLORS.gold}80, 0 0 60px ${COLORS.gold}40`,
+          }}>
+            {finalScore}
+          </div>
+          <div style={{
+            color: COLORS.gray, fontSize: 15, marginBottom: 4,
+            textShadow: '0 0 8px rgba(245,166,35,0.5)',
+          }}>
+            Solidarity: {finalSolidarity}%
+          </div>
+          <div style={{
+            color: COLORS.gray, fontSize: 13, marginBottom: 24,
+            textShadow: '0 0 6px rgba(255,255,255,0.3)',
+          }}>
             Dukdukdiya builds with love
           </div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.mint, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <button onClick={() => { sounds.pop(); haptics.tapFeedback(); onComplete(state.current.score); }} style={{
+            background: `linear-gradient(135deg, ${COLORS.mint}, ${COLORS.emerald})`,
+            color: COLORS.primary, border: 'none',
+            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
+            cursor: 'pointer', marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.mint}60, 0 4px 15px rgba(0,0,0,0.3)`,
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+          <button onClick={() => { sounds.tick(); haptics.tapFeedback(); onBack(); }} style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
+            color: COLORS.gray, border: `1px solid ${COLORS.gray}50`,
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => { haptics.tapFeedback(); onBack(); }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
         }}>Back</button>
       )}
     </div>

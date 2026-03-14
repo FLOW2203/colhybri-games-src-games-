@@ -2,6 +2,8 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 30;
@@ -16,12 +18,16 @@ const HINT_DURATION = 1.0;
 const CUP_WIDTH = 52;
 const CUP_HEIGHT = 60;
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+
 export default function GamePerroquetComprend({ onComplete, onBack }) {
   const canvasRef = useRef(null);
   const [phase, setPhase] = useState('ready');
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -52,6 +58,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
     })),
     flashAlpha: 0,
     flashColor: [0, 0, 0],
+    lastWarningSecond: -1,
   });
 
   const initRound = useCallback(() => {
@@ -118,7 +125,11 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        haptics.tapFeedback();
+        sounds.pop();
+        setPhase('playing');
+      }
       return;
     }
     const s = state.current;
@@ -145,6 +156,13 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
           s.flashColor = [46, 234, 163];
           spawnParticles(cp.x, cp.y, 12, [46, 234, 163]);
           sounds.chime();
+          sounds.success();
+          haptics.successFeedback();
+          juice.flash('#2EEA A3', 0.4);
+          if (s.streak >= 3) {
+            sounds.combo(s.streak);
+            haptics.comboFeedback(Math.min(s.streak, 5));
+          }
         } else {
           s.score = Math.max(0, s.score - WRONG_POINTS);
           s.streak = 0;
@@ -154,13 +172,19 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
           s.flashColor = [239, 68, 68];
           spawnParticles(cp.x, cp.y, 6, [239, 68, 68]);
           sounds.firecrackle();
+          sounds.fail();
+          haptics.failFeedback();
+          juice.shake(10, 0.35);
+          juice.flash('#EF4444', 0.5);
         }
         s.roundPhase = 'reveal';
         s.roundTimer = 0;
+        haptics.impactFeedback();
+        sounds.impact();
         return;
       }
     }
-  }, [phase, sounds, spawnParticles]);
+  }, [phase, sounds, haptics, juice, spawnParticles]);
 
   useTouch(canvasRef, { onTap: handleTap });
 
@@ -193,22 +217,24 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Le Perroquet Comprend', cx, cy - 60, '#5BE0FF', 26);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Le Perroquet Comprend', cx, cy - 60);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.cyan;
       ctx.fillText('Parrots understand probability!', cx, cy - 10);
       ctx.fillText('Watch the hints, pick the right cup.', cx, cy + 16);
-      ctx.font = '16px sans-serif';
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Tap the cup hiding the reward', cx, cy + 55);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Glow behind tap text
+      juice.drawGlow(ctx, cx, cy + 110, 60, '#5BE0FF', 0.15 + Math.sin(elapsed * 4) * 0.1);
+
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 110);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, '#FFFFFF', 20);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -218,6 +244,17 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     s.parrotBob += delta * 3;
     s.flashAlpha = Math.max(0, s.flashAlpha - delta * 2);
+
+    // Warning haptics at low time
+    const currentSecond = Math.ceil(s.timeLeft);
+    if (s.timeLeft <= 5 && s.timeLeft > 0 && currentSecond !== s.lastWarningSecond) {
+      s.lastWarningSecond = currentSecond;
+      haptics.warningFeedback();
+      sounds.tick();
+    }
+
+    // Juice update
+    juice.update(delta);
 
     // Round state machine
     s.roundTimer += delta;
@@ -243,12 +280,14 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
           s.shuffleIndex++;
           s.shuffleT = 0;
           sounds.whoosh();
+          haptics.tapFeedback();
         }
       }
       if (s.shuffleIndex >= s.shufflePairs.length && s.shuffleT >= shuffleSpeed) {
         s.roundPhase = 'choose';
         s.roundTimer = 0;
         s.parrotMood = 'neutral';
+        sounds.pop();
       }
     } else if (s.roundPhase === 'reveal') {
       if (s.roundTimer >= REVEAL_DURATION) {
@@ -270,6 +309,8 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
       setDisplayScore(s.score);
+      haptics.heavyFeedback();
+      sounds.impact();
       return;
     }
 
@@ -281,16 +322,27 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
 
-    // Flash overlay
+    // Apply screen shake
+    ctx.save();
+    juice.applyShake(ctx);
+
+    // Flash overlay (original)
     if (s.flashAlpha > 0.01) {
       ctx.fillStyle = `rgba(${s.flashColor[0]},${s.flashColor[1]},${s.flashColor[2]},${s.flashAlpha})`;
       ctx.fillRect(0, 0, w, h);
     }
 
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
+
     // Draw parrot companion
     const pbob = Math.sin(s.parrotBob) * 5;
     ctx.save();
     ctx.translate(s.parrotX, s.parrotY + pbob);
+
+    // Parrot glow
+    const parrotGlowColor = s.parrotMood === 'happy' ? '#2EEAA3' : s.parrotMood === 'sad' ? '#EF4444' : '#5BE0FF';
+    juice.drawGlow(ctx, 0, 0, 50, parrotGlowColor, 0.2);
 
     // Parrot body
     ctx.beginPath();
@@ -403,13 +455,22 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
       ctx.save();
       ctx.translate(drawX, drawY);
 
-      // Hint glow during hint phase
+      // Hint glow during hint phase (enhanced with juice.drawGlow)
       if (s.roundPhase === 'hint' && s.hintGlows[i] > 0) {
         const glowIntensity = s.hintGlows[i] * (0.5 + 0.5 * Math.sin(elapsed * 8));
+        // Use juice glow for stronger effect
+        juice.drawGlow(ctx, 0, 0, CUP_WIDTH / 2 + 20, '#F5A623', glowIntensity * 0.5);
+        // Original glow
         ctx.beginPath();
         ctx.ellipse(0, 0, CUP_WIDTH / 2 + 10, CUP_HEIGHT / 2 + 10, 0, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(245,166,35,${glowIntensity * 0.4})`;
         ctx.fill();
+      }
+
+      // Choose phase - glow on cups to indicate interactivity
+      if (s.roundPhase === 'choose') {
+        const pulseAlpha = 0.1 + 0.05 * Math.sin(elapsed * 5 + i);
+        juice.drawGlow(ctx, 0, 0, CUP_WIDTH / 2 + 12, '#5BE0FF', pulseAlpha);
       }
 
       // Cup shape (trapezoid)
@@ -453,9 +514,11 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
         // Draw star reward
         const actualCup = s.cups[i];
         if (actualCup === s.rewardCup) {
+          // Glow behind star
+          juice.drawGlow(ctx, 0, 5, 25, '#FFD700', 0.6);
           drawStar(ctx, 0, 5, 12, 6, 5, '#FFD700');
         } else {
-          ctx.font = 'bold 18px sans-serif';
+          ctx.font = `bold 18px ${FONT_FAMILY}`;
           ctx.textAlign = 'center';
           ctx.fillStyle = COLORS.red;
           ctx.fillText('X', 0, 10);
@@ -464,7 +527,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
 
       // Choose phase hover indicator
       if (s.roundPhase === 'choose') {
-        ctx.font = '10px sans-serif';
+        ctx.font = `10px ${FONT_FAMILY}`;
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.25)';
         ctx.fillText('?', 0, 4);
@@ -473,7 +536,9 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
       ctx.restore();
     }
 
-    // Draw particles
+    // Draw particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -491,63 +556,56 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
+
+    // Restore from shake transform
+    ctx.restore();
 
     // Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
+    // Timer bar glow when low
+    if (s.timeLeft < 5) {
+      juice.drawGlow(ctx, w * timerFrac, 2, 30, '#EF4444', 0.3 + 0.2 * Math.sin(elapsed * 10));
+    }
 
-    // Timer text
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Timer text (neon)
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, s.timeLeft < 5 ? '#EF4444' : '#FFFFFF', 24);
 
-    // Score
-    ctx.font = 'bold 22px sans-serif';
+    // Score (neon)
+    juice.drawNeonText(ctx, `${s.score}`, 40, 40, '#FFD700', 22);
+    ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.gold;
-    ctx.fillText(`${s.score}`, 20, 40);
-    ctx.font = '12px sans-serif';
     ctx.fillStyle = COLORS.gray;
-    ctx.fillText('pts', 20 + ctx.measureText(`${s.score}`).width + 6, 40);
+    ctx.fillText('pts', 40 + ctx.measureText(`${s.score}`).width / 2 + 18, 40);
 
     // Streak
     if (s.streak > 0) {
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.mint;
-      ctx.fillText(`Streak: ${s.streak}x`, cx, h * 0.35);
+      juice.drawNeonText(ctx, `Streak: ${s.streak}x`, cx, h * 0.35, '#2EEAA3', 16);
+      juice.drawGlow(ctx, cx, h * 0.35, 40, '#2EEAA3', 0.15);
     }
 
     // Cups count indicator
-    ctx.font = '13px sans-serif';
+    ctx.font = `13px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.fillText(`${s.numCups} cups`, cx, h * 0.65);
 
-    // Round phase indicator
+    // Round phase indicator (neon text)
     if (s.roundPhase === 'hint') {
-      ctx.font = 'bold 15px sans-serif';
-      ctx.fillStyle = COLORS.gold;
-      ctx.textAlign = 'center';
-      ctx.fillText('Watch carefully...', cx, h * 0.38);
+      juice.drawNeonText(ctx, 'Watch carefully...', cx, h * 0.38, '#FFD700', 15);
     } else if (s.roundPhase === 'shuffle') {
-      ctx.font = 'bold 15px sans-serif';
-      ctx.fillStyle = COLORS.cyan;
-      ctx.textAlign = 'center';
-      ctx.fillText('Shuffling...', cx, h * 0.38);
+      juice.drawNeonText(ctx, 'Shuffling...', cx, h * 0.38, '#5BE0FF', 15);
     } else if (s.roundPhase === 'choose') {
-      ctx.font = 'bold 15px sans-serif';
-      ctx.fillStyle = COLORS.white;
-      ctx.textAlign = 'center';
-      ctx.fillText('Pick a cup!', cx, h * 0.38);
+      juice.drawNeonText(ctx, 'Pick a cup!', cx, h * 0.38, '#FFFFFF', 15);
     }
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, getCupPositions, initRound]));
+  }, [phase, sounds, haptics, juice, spawnParticles, getCupPositions, initRound]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -565,6 +623,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
       s.numCups = BASE_CUPS;
       s.parrotMood = 'neutral';
       s.flashAlpha = 0;
+      s.lastWarningSecond = -1;
       for (const p of s.particles) p.active = false;
       initRound();
       gameLoop.reset();
@@ -585,36 +644,73 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
+            textShadow: '0 0 20px rgba(91,224,255,0.6), 0 0 40px rgba(91,224,255,0.3)',
+          }}>
             Le Perroquet Comprend
           </div>
-          <div style={{ color: COLORS.mint, fontSize: 18, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.mint, fontSize: 18, marginBottom: 8,
+            textShadow: '0 0 10px rgba(46,234,163,0.5)',
+          }}>
             Correct: {state.current.correctCount} | Wrong: {state.current.wrongCount}
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 16, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.cyan, fontSize: 16, marginBottom: 4,
+            textShadow: '0 0 10px rgba(91,224,255,0.5)',
+          }}>
             Best streak: {state.current.bestStreak}x
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4,
+            textShadow: '0 0 30px rgba(255,215,0,0.7), 0 0 60px rgba(255,215,0,0.3)',
+          }}>
             {displayScore}
           </div>
           <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <button onClick={() => {
+            haptics.tapFeedback();
+            sounds.pop();
+            onComplete(state.current.score);
+          }} style={{
+            background: 'linear-gradient(135deg, #5BE0FF 0%, #00A0CC 100%)',
+            color: COLORS.primary, border: 'none',
+            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
+            cursor: 'pointer', marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: '0 0 20px rgba(91,224,255,0.4), 0 4px 15px rgba(0,0,0,0.3)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
           }}>Continue</button>
-          <button onClick={onBack} style={{
+          <button onClick={() => {
+            haptics.tapFeedback();
+            sounds.pop();
+            onBack();
+          }} style={{
             background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            boxShadow: '0 0 10px rgba(255,255,255,0.05)',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          sounds.pop();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>

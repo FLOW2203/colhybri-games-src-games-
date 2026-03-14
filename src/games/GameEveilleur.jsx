@@ -2,11 +2,14 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 30;
 const POOL_SIZE = 200;
 const PELICAN_COUNT = 7;
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 const BIRDS = [
   { name: 'Colibri', color: '#2EEAA3', darkColor: '#1CA04A', size: 10, joinTime: 0 },
@@ -23,6 +26,8 @@ export default function GameEveilleur({ onComplete, onBack }) {
   const [displayTime, setDisplayTime] = useState(GAME_DURATION);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     score: 0,
@@ -55,6 +60,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
     lastNewBirdCount: 1,
     tapPulse: 0,
     epicShake: 0,
+    lastWarningTime: 0,
   });
 
   const spawnDrop = useCallback((x, y, r, g, b) => {
@@ -97,7 +103,12 @@ export default function GameEveilleur({ onComplete, onBack }) {
   }, []);
 
   const handleTap = useCallback(() => {
-    if (phase === 'ready') { setPhase('playing'); return; }
+    if (phase === 'ready') {
+      setPhase('playing');
+      sounds.countdown(true);
+      haptics.tapFeedback();
+      return;
+    }
     if (phase !== 'playing') return;
     const s = state.current;
 
@@ -120,22 +131,31 @@ export default function GameEveilleur({ onComplete, onBack }) {
       s.score += s.activeBirds;
 
       sounds.splash();
+      sounds.impact();
+      haptics.heavyFeedback();
+      juice.shake(12, 0.4);
+      juice.flash('#00BFFF', 0.3);
       s.epicShake = 0.3;
     } else if (s.gamePhase <= 2) {
       // Drop from all active birds
       for (let i = 0; i < s.activeBirds; i++) {
         const bp = s.birdPositions[i];
-        const bird = BIRDS[i];
         spawnDrop(bp.x, bp.y + 10);
         spawnParticles(bp.x, bp.y + 10, 2, 0, 191, 255);
       }
       s.totalDrops += s.activeBirds;
       s.score += s.activeBirds;
-      sounds.tick();
+      sounds.drop();
+      haptics.tapFeedback();
+
+      if (s.activeBirds > 1) {
+        sounds.combo(s.activeBirds);
+        haptics.comboFeedback(s.activeBirds);
+      }
     }
 
     setDisplayScore(s.score);
-  }, [phase, sounds, spawnDrop, spawnParticles]);
+  }, [phase, sounds, haptics, juice, spawnDrop, spawnParticles]);
 
   useTouch(canvasRef, { onTap: handleTap });
 
@@ -263,31 +283,52 @@ export default function GameEveilleur({ onComplete, onBack }) {
     const s = state.current;
     const cx = w / 2;
 
+    // Update juice system
+    juice.update(delta);
+
     if (phase === 'ready') {
       ctx.fillStyle = '#1A0A00';
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+
+      // Neon title
+      juice.drawNeonText(ctx, "L'Eveilleur", w / 2, h / 2 - 80, COLORS.mint, 28);
+
+      // Glow behind title
+      juice.drawGlow(ctx, w / 2, h / 2 - 80, 80, COLORS.mint, 0.15);
+
+      ctx.font = `15px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText("L'Eveilleur", w / 2, h / 2 - 80);
-      ctx.font = '15px sans-serif';
       ctx.fillStyle = COLORS.mint;
       ctx.fillText('The individual triggers', w / 2, h / 2 - 30);
       ctx.fillText('the collective!', w / 2, h / 2 - 8);
-      ctx.font = '13px sans-serif';
+      ctx.font = `13px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Phase 1: Solo hummingbird drops', w / 2, h / 2 + 30);
       ctx.fillText('Phase 2: Birds join, multiplier grows', w / 2, h / 2 + 50);
       ctx.fillText('Phase 3: Pelican frenzy cascade!', w / 2, h / 2 + 70);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillText('TAP TO START', w / 2, h / 2 + 120);
+
+      // Pulsing TAP TO START with neon
+      const pulse = 0.7 + Math.sin(elapsed * 3) * 0.3;
+      ctx.globalAlpha = pulse;
+      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.white, 20);
+      ctx.globalAlpha = 1;
+
       ctx.restore();
       return;
     }
 
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
     setDisplayTime(Math.ceil(s.timeLeft));
+
+    // Low time warning haptic
+    if (s.timeLeft < 8 && s.timeLeft > 0) {
+      const timeInt = Math.ceil(s.timeLeft);
+      if (timeInt !== s.lastWarningTime && timeInt <= 5) {
+        s.lastWarningTime = timeInt;
+        haptics.warningFeedback();
+        sounds.countdown(timeInt === 1);
+      }
+    }
 
     // Determine game phase
     if (elapsed < 10) s.gamePhase = 1;
@@ -305,6 +346,10 @@ export default function GameEveilleur({ onComplete, onBack }) {
       s.birdPositions[idx].entranceTimer = 1.0;
       s.birdPositions[idx].entered = true;
       sounds.chime();
+      sounds.powerup();
+      haptics.impactFeedback();
+      juice.shake(6, 0.2);
+      juice.flash(BIRDS[idx].color, 0.25);
       spawnParticles(cx, h * 0.3, 15, 255, 255, 255);
     }
     s.lastNewBirdCount = newBirdCount;
@@ -352,6 +397,8 @@ export default function GameEveilleur({ onComplete, onBack }) {
         s.score += 3;
         setDisplayScore(s.score);
         spawnParticles(p.x, p.y, 6, 200, 230, 255);
+        sounds.pop();
+        haptics.tapFeedback();
       }
     }
 
@@ -423,12 +470,16 @@ export default function GameEveilleur({ onComplete, onBack }) {
     // Game over
     if (s.timeLeft <= 0 && phase === 'playing') {
       setPhase('ended');
+      sounds.success();
+      haptics.successFeedback();
+      juice.flash('#22C55E', 0.5);
       return;
     }
 
     // --- RENDER ---
-    // Apply epic shake
+    // Apply both the original epicShake and juice shake
     ctx.save();
+    juice.applyShake(ctx);
     if (s.epicShake > 0.01) {
       ctx.translate(Math.sin(elapsed * 40) * s.epicShake * 8, Math.cos(elapsed * 35) * s.epicShake * 5);
     }
@@ -450,10 +501,17 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
     }
 
+    // Juice screen flash overlay
+    juice.drawFlash(ctx, w, h);
+
     // Fire zone at bottom
     const fireBaseY = h * (1 - 0.25 * s.fireHeight);
     if (s.fireHeight > 0.05) {
       const fh = h * 0.25 * s.fireHeight;
+
+      // Fire glow effect at bottom
+      juice.drawGlow(ctx, cx, h, fh * 1.5, '#FF4500', 0.2 * s.fireHeight);
+
       // Flame columns
       for (let i = 0; i < 20; i++) {
         const fx = (i / 20) * w + Math.sin(elapsed * 4 + i * 1.3) * 8;
@@ -473,7 +531,9 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.fillRect(0, fireBaseY, w, h - fireBaseY);
     }
 
-    // Fire embers
+    // Fire embers with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const e of s.fireEmbers) {
       if (!e.active) continue;
       const alpha = Math.min(1, e.life * 0.8);
@@ -482,6 +542,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(255,${Math.floor(100 + Math.random() * 80)},0,${alpha * 0.6})`;
       ctx.fill();
     }
+    ctx.restore();
 
     // Draw pelicans (phase 3)
     if (s.pelicanActive) {
@@ -495,6 +556,10 @@ export default function GameEveilleur({ onComplete, onBack }) {
 
       for (let i = 0; i < PELICAN_COUNT; i++) {
         const pp = s.pelicanPositions[i];
+
+        // Glow around pelicans
+        juice.drawGlow(ctx, pp.x, pp.y, 25, '#F5F5DC', 0.15);
+
         drawPelican(ctx, pp.x, pp.y, elapsed, pp.flashTimer > 0);
         if (pp.cascadeTimer > 0) {
           // Cascade ring effect
@@ -504,19 +569,33 @@ export default function GameEveilleur({ onComplete, onBack }) {
           ctx.strokeStyle = `rgba(0,191,255,${pp.cascadeTimer})`;
           ctx.lineWidth = 2;
           ctx.stroke();
+
+          // Additional glow on cascade
+          juice.drawGlow(ctx, pp.x, pp.y, ringSize + 10, '#00BFFF', pp.cascadeTimer * 0.4);
         }
       }
     }
 
-    // Draw birds
+    // Draw birds with glow
     for (let i = 0; i < s.activeBirds; i++) {
       const bp = s.birdPositions[i];
       const bird = BIRDS[i];
       const entranceScale = bp.entranceTimer > 0 ? 1 + bp.entranceTimer * 2 : 1;
+
+      // Glow around birds
+      juice.drawGlow(ctx, bp.x, bp.y, bird.size * 2.5, bird.color, 0.2);
+
       drawBird(ctx, bp.x, bp.y, bird, elapsed, entranceScale);
+
+      // Extra entrance glow
+      if (bp.entranceTimer > 0) {
+        juice.drawGlow(ctx, bp.x, bp.y, bird.size * 4, bird.color, bp.entranceTimer * 0.5);
+      }
     }
 
-    // Water drops
+    // Water drops with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const d of s.drops) {
       if (!d.active) continue;
       ctx.beginPath();
@@ -529,8 +608,11 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${d.r},${d.g},${d.b},0.3)`;
       ctx.fill();
     }
+    ctx.restore();
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -539,25 +621,21 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
       ctx.fill();
     }
+    ctx.restore();
 
-    // Join animations
+    // Join animations with neon text
     for (const ja of s.joinAnimations) {
       const bird = BIRDS[ja.birdIndex];
       ctx.globalAlpha = Math.min(1, ja.timer);
-      ctx.font = 'bold 20px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = bird.color;
       const yOff = (1.5 - ja.timer) * 30;
-      ctx.fillText(`+ ${bird.name}!`, cx, h * 0.55 - yOff);
+      juice.drawNeonText(ctx, `+ ${bird.name}!`, cx, h * 0.55 - yOff, bird.color, 20);
       ctx.globalAlpha = 1;
     }
 
     ctx.restore(); // shake
 
-    // Phase indicator
+    // Phase indicator with neon text
     const phaseNum = s.gamePhase;
-    ctx.font = 'bold 14px sans-serif';
-    ctx.textAlign = 'center';
     let phaseLabel, phaseCol;
     if (phaseNum === 1) {
       phaseLabel = 'SOLO';
@@ -569,25 +647,25 @@ export default function GameEveilleur({ onComplete, onBack }) {
       phaseLabel = `PELICAN CASCADE x${PELICAN_COUNT * 3 + s.activeBirds}`;
       phaseCol = COLORS.gold;
     }
-    ctx.fillStyle = phaseCol;
-    ctx.fillText(phaseLabel, cx, 72);
+    juice.drawNeonText(ctx, phaseLabel, cx, 72, phaseCol, 14);
 
-    // Total drops
-    ctx.font = '13px sans-serif';
-    ctx.fillStyle = COLORS.water;
-    ctx.fillText(`Drops: ${s.totalDrops}`, cx, 90);
+    // Total drops with neon
+    juice.drawNeonText(ctx, `Drops: ${s.totalDrops}`, cx, 90, COLORS.water, 13);
 
-    // Score
-    ctx.font = 'bold 28px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`${s.score}`, cx, 42);
+    // Score with neon glow
+    juice.drawGlow(ctx, cx, 36, 30, COLORS.white, 0.1);
+    juice.drawNeonText(ctx, `${s.score}`, cx, 42, COLORS.white, 28);
 
-    // Timer
-    ctx.font = 'bold 22px sans-serif';
+    // Timer with neon
+    ctx.save();
     ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 8 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    const timerColor = s.timeLeft < 8 ? COLORS.red : COLORS.white;
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 20, 40, timerColor, 22);
+    // Glow on low time
+    if (s.timeLeft < 8) {
+      juice.drawGlow(ctx, w - 30, 36, 25, COLORS.red, 0.2 + Math.sin(elapsed * 6) * 0.1);
+    }
+    ctx.restore();
 
     // Phase progress bar
     const barW = w * 0.7;
@@ -616,16 +694,20 @@ export default function GameEveilleur({ onComplete, onBack }) {
     ctx.fillRect(p1End, barY - 2, 1, 10);
     ctx.fillRect(p2End, barY - 2, 1, 10);
 
+    // Glow dot at current progress position
+    const progressX = barX + barW * (elapsed / GAME_DURATION);
+    juice.drawGlow(ctx, progressX, barY + 3, 8, phaseCol, 0.4);
+
     // Hint text in phase 1
     if (s.gamePhase === 1 && elapsed < 3) {
-      ctx.font = '14px sans-serif';
+      ctx.font = `14px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('TAP to send water drops!', cx, h * 0.65);
     }
 
     ctx.restore();
-  }, [phase, sounds, spawnDrop, spawnParticles]));
+  }, [phase, sounds, haptics, juice, spawnDrop, spawnParticles]));
 
   useEffect(() => { if (phase === 'ready') gameLoop.start(); }, [phase, gameLoop]);
 
@@ -636,6 +718,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
       s.pelicanActive = false; s.fireHeight = 1.0; s.joinAnimations = [];
       s.cascadeQueue = []; s.lastNewBirdCount = 1; s.tapPulse = 0; s.epicShake = 0;
       s.skyColorR = 80; s.skyColorG = 40; s.skyColorB = 10;
+      s.lastWarningTime = 0;
       for (const d of s.drops) d.active = false;
       for (const p of s.particles) p.active = false;
       for (const e of s.fireEmbers) e.active = false;
@@ -655,34 +738,77 @@ export default function GameEveilleur({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 8 }}>The Collective Awakens!</div>
-          <div style={{ color: COLORS.cyan, fontSize: 48, fontWeight: 'bold', marginBottom: 8 }}>{state.current.score}</div>
-          <div style={{ color: COLORS.gray, fontSize: 15, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`,
+          }}>The Collective Awakens!</div>
+          <div style={{
+            color: COLORS.cyan, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
+            textShadow: `0 0 30px ${COLORS.cyan}, 0 0 60px ${COLORS.cyan}80`,
+          }}>{state.current.score}</div>
+          <div style={{
+            color: COLORS.gray, fontSize: 15, marginBottom: 4,
+            textShadow: '0 0 8px rgba(255,255,255,0.3)',
+          }}>
             Total drops: {state.current.totalDrops}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 15, marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.gray, fontSize: 15, marginBottom: 4,
+            textShadow: '0 0 8px rgba(255,255,255,0.3)',
+          }}>
             Fire reduced to {Math.floor(state.current.fireHeight * 100)}%
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 13, marginBottom: 24 }}>
+          <div style={{
+            color: COLORS.gray, fontSize: 13, marginBottom: 24,
+            textShadow: '0 0 8px rgba(255,255,255,0.2)',
+          }}>
             One spark ignites the collective!
           </div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.mint, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <button onClick={() => {
+            sounds.pop();
+            haptics.tapFeedback();
+            onComplete(state.current.score);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.mint}, ${COLORS.cyan})`,
+            color: COLORS.primary, border: 'none',
+            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
+            cursor: 'pointer', marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.mint}60, 0 0 40px ${COLORS.mint}30`,
+            textShadow: 'none',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+          <button onClick={() => {
+            sounds.tick();
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.05)',
+            color: COLORS.gray, border: `1px solid ${COLORS.gray}50`,
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            boxShadow: '0 0 10px rgba(255,255,255,0.05)',
+            textShadow: '0 0 6px rgba(255,255,255,0.2)',
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}>Back</button>
       )}
     </div>

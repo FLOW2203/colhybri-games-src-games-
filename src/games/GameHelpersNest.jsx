@@ -2,6 +2,8 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 45;
@@ -13,12 +15,16 @@ const MAX_INSECTS = 8;
 const INSECT_SPAWN_INTERVAL = 1.2;
 const AI_CATCH_INTERVAL = 2.5;
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+
 export default function GameHelpersNest({ onComplete, onBack }) {
   const canvasRef = useRef(null);
   const [phase, setPhase] = useState('ready');
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -46,6 +52,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
     nestX: 0, nestY: 0,
     gameOver: false,
     flashAlpha: 0,
+    warningPulse: 0,
   });
 
   const spawnParticles = useCallback((cx, cy, count, colors) => {
@@ -79,17 +86,24 @@ export default function GameHelpersNest({ onComplete, onBack }) {
     chick.hunger = Math.min(100, chick.hunger + FEED_AMOUNT);
     chick.bounceT = 0.5;
     s.totalFed++;
-    spawnParticles(chick.x, chick.y, 6, [[255, 220, 50], [255, 180, 0], [255, 255, 200]]);
+    spawnParticles(chick.x, chick.y, 8, [[255, 220, 50], [255, 180, 0], [255, 255, 200]]);
     sounds.chime();
-  }, [spawnParticles, sounds]);
+    sounds.pop();
+    haptics.impactFeedback();
+    juice.flash('#FFD700', 0.3);
+    juice.shake(4, 0.15);
+  }, [spawnParticles, sounds, haptics, juice]);
 
   const handleTap = useCallback(({ x, y }) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        sounds.countdown(true);
+        haptics.tapFeedback();
+      }
       return;
     }
     const s = state.current;
-    const dpr = window.devicePixelRatio || 1;
 
     // If already carrying, tap on a chick to feed
     if (s.caughtInsect) {
@@ -105,6 +119,8 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       }
       // Tap elsewhere drops insect
       s.caughtInsect = null;
+      sounds.drop();
+      haptics.tapFeedback();
       return;
     }
 
@@ -122,11 +138,14 @@ export default function GameHelpersNest({ onComplete, onBack }) {
         ins.active = false;
         s.caughtInsect = { x: ins.x, y: ins.y };
         sounds.tick();
-        spawnParticles(ins.x, ins.y, 4, [[100, 200, 100], [50, 150, 50]]);
+        sounds.pop();
+        haptics.tapFeedback();
+        juice.shake(2, 0.1);
+        spawnParticles(ins.x, ins.y, 5, [[100, 200, 100], [50, 150, 50]]);
         return;
       }
     }
-  }, [phase, feedChick, sounds, spawnParticles]);
+  }, [phase, feedChick, sounds, spawnParticles, haptics, juice]);
 
   const handleSwipe = useCallback((direction) => {
     if (phase !== 'playing') return;
@@ -142,8 +161,9 @@ export default function GameHelpersNest({ onComplete, onBack }) {
     if (idx >= 0) {
       feedChick(idx);
       s.caughtInsect = null;
+      sounds.whoosh();
     }
-  }, [phase, feedChick]);
+  }, [phase, feedChick, sounds]);
 
   useTouch(canvasRef, { onTap: handleTap, onSwipe: handleSwipe });
 
@@ -186,29 +206,52 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 28px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Helpers at the Nest', cx, cy - 60, '#2EEAA3', 28);
+
+      // Glow behind title
+      juice.drawGlow(ctx, cx, cy - 60, 120, '#2EEAA3', 0.15);
+
+      ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Helpers at the Nest', cx, cy - 60);
-      ctx.font = '18px sans-serif';
       ctx.fillStyle = COLORS.gold;
+      ctx.shadowColor = COLORS.gold;
+      ctx.shadowBlur = 8;
       ctx.fillText('Toucans cooperate to raise chicks!', cx, cy - 10);
-      ctx.font = '16px sans-serif';
+      ctx.shadowBlur = 0;
+
+      ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('TAP insects to catch, SWIPE to feed chicks', cx, cy + 30);
       ctx.fillText('Keep all 3 chicks fed for 45 seconds', cx, cy + 55);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing "TAP TO START" with neon
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, cy + 110);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, '#00D4FF', 20);
       ctx.globalAlpha = 1;
+
+      // Glow pulse on start prompt
+      juice.drawGlow(ctx, cx, cy + 110, 60 + Math.sin(elapsed * 4) * 20, '#00D4FF', 0.1 * tapAlpha);
+
       ctx.restore();
       return;
     }
 
     // --- UPDATE ---
+    juice.update(delta);
     s.timeLeft = Math.max(0, GAME_DURATION - elapsed);
+
+    // Warning pulse for low time
+    if (s.timeLeft < 10 && s.timeLeft > 0) {
+      s.warningPulse += delta * 6;
+    }
+
+    // Low time warning haptic
+    if (s.timeLeft < 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.countdown(false);
+    }
 
     // Hunger decay
     let anyDead = false;
@@ -226,6 +269,18 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       const score = s.totalFed * surviving;
       setPhase('ended');
       setDisplayScore(score);
+
+      if (anyDead) {
+        sounds.fail();
+        haptics.failFeedback();
+        juice.shake(12, 0.5);
+        juice.flash('#EF4444', 0.5);
+      } else {
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#22C55E', 0.4);
+      }
+
       ctx.restore();
       return;
     }
@@ -277,6 +332,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
                 ch.hunger < s.chicks[best].hunger ? idx : best, 0);
               s[timerKey] = 0;
               spawnParticles(ins.x, ins.y, 3, [[100, 200, 100]]);
+              sounds.wingflap();
               break;
             }
           }
@@ -320,6 +376,9 @@ export default function GameHelpersNest({ onComplete, onBack }) {
     }
 
     // --- RENDER ---
+    // Apply shake before drawing
+    juice.applyShake(ctx);
+
     // Forest background
     const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
     skyGrad.addColorStop(0, '#1a5c3a');
@@ -346,6 +405,9 @@ export default function GameHelpersNest({ onComplete, onBack }) {
     ctx.fillRect(0, 0, w * 0.3, h);
     ctx.fillRect(w * 0.7, 0, w * 0.3, h);
 
+    // Nest glow
+    juice.drawGlow(ctx, s.nestX, s.nestY, 100, '#7a4e2a', 0.15);
+
     // Nest (brown oval with twigs)
     ctx.beginPath();
     ctx.ellipse(s.nestX, s.nestY + 15, 90, 35, 0, 0, Math.PI * 2);
@@ -371,6 +433,17 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       const ch = s.chicks[i];
       const bounce = ch.bounceT > 0 ? Math.sin(ch.bounceT * Math.PI * 6) * 8 : 0;
       const chickY = ch.y - bounce;
+
+      // Glow around hungry chicks (warning)
+      if (ch.hunger < 30 && ch.hunger > 0) {
+        const pulseAlpha = 0.15 + Math.sin(elapsed * 8) * 0.1;
+        juice.drawGlow(ctx, ch.x, chickY, 35, '#EF4444', pulseAlpha);
+      }
+
+      // Glow when recently fed (bounce active)
+      if (ch.bounceT > 0) {
+        juice.drawGlow(ctx, ch.x, chickY, 30, '#FFD700', 0.3 * ch.bounceT);
+      }
 
       // Body (yellow circle)
       ctx.beginPath();
@@ -414,13 +487,28 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
       ctx.fillRect(barX, barY, barW, barH);
       const frac = ch.hunger / 100;
-      ctx.fillStyle = frac > 0.4 ? COLORS.green : frac > 0.2 ? COLORS.gold : COLORS.red;
+      const barColor = frac > 0.4 ? COLORS.green : frac > 0.2 ? COLORS.gold : COLORS.red;
+      ctx.fillStyle = barColor;
       ctx.fillRect(barX, barY, barW * frac, barH);
+
+      // Hunger bar glow for low hunger
+      if (frac <= 0.2 && ch.hunger > 0) {
+        ctx.save();
+        ctx.shadowColor = COLORS.red;
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = COLORS.red;
+        ctx.fillRect(barX, barY, barW * frac, barH);
+        ctx.restore();
+      }
     }
 
-    // Draw insects
+    // Draw insects with glow
     for (const ins of s.insects) {
       if (!ins.active) continue;
+
+      // Subtle glow around insects
+      juice.drawGlow(ctx, ins.x, ins.y, 15, '#88FF88', 0.2);
+
       ctx.beginPath();
       ctx.arc(ins.x, ins.y, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#2a2a2a';
@@ -480,12 +568,24 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       ctx.fillStyle = beakGrad;
       ctx.fill();
 
-      // Carrying indicator
+      // Carrying indicator with glow
       if (adult.carrying) {
         ctx.beginPath();
         ctx.arc(45, -1, 4, 0, Math.PI * 2);
         ctx.fillStyle = '#2a2a2a';
         ctx.fill();
+        // Glow around carried insect
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.globalCompositeOperation = 'lighter';
+        const cGrad = ctx.createRadialGradient(45, -1, 0, 45, -1, 12);
+        cGrad.addColorStop(0, '#88FF88');
+        cGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = cGrad;
+        ctx.beginPath();
+        ctx.arc(45, -1, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
 
       ctx.restore();
@@ -494,8 +594,11 @@ export default function GameHelpersNest({ onComplete, onBack }) {
     drawToucan(s.adultL, false);
     drawToucan(s.adultR, true);
 
-    // Caught insect indicator (follows near center)
+    // Caught insect indicator (follows near center) with glow
     if (s.caughtInsect) {
+      // Glow ring around caught insect
+      juice.drawGlow(ctx, cx, s.nestY - 80, 25, COLORS.gold, 0.3 + Math.sin(elapsed * 6) * 0.1);
+
       ctx.beginPath();
       ctx.arc(cx, s.nestY - 80, 8, 0, Math.PI * 2);
       ctx.fillStyle = '#2a2a2a';
@@ -503,19 +606,23 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       ctx.strokeStyle = COLORS.gold;
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.font = '12px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.white;
-      ctx.fillText('Swipe to feed!', cx, s.nestY - 95);
+
+      // Neon swipe instruction
+      juice.drawNeonText(ctx, 'Swipe to feed!', cx, s.nestY - 100, COLORS.gold, 13);
     }
 
-    // Flash effect
+    // Flash effect (original)
     if (s.flashAlpha > 0.01) {
       ctx.fillStyle = `rgba(255,220,50,${s.flashAlpha})`;
       ctx.fillRect(0, 0, w, h);
     }
 
-    // Particles
+    // Juice flash overlay
+    juice.drawFlash(ctx, w, h);
+
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -533,28 +640,45 @@ export default function GameHelpersNest({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
 
     // HUD - Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.mint;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.mint;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
 
-    // Timer text
-    ctx.font = 'bold 24px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+    // Timer bar glow when low
+    if (s.timeLeft < 10) {
+      ctx.save();
+      ctx.shadowColor = COLORS.red;
+      ctx.shadowBlur = 8 + Math.sin(s.warningPulse) * 4;
+      ctx.fillStyle = COLORS.red;
+      ctx.fillRect(0, 0, w * timerFrac, 4);
+      ctx.restore();
+    }
 
-    // Score
-    ctx.font = '16px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Fed: ${s.totalFed}`, 20, 40);
+    // Timer text with neon
+    if (s.timeLeft < 5) {
+      juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, COLORS.red, 24);
+    } else {
+      ctx.save();
+      ctx.font = `bold 24px ${FONT_FAMILY}`;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = COLORS.white;
+      ctx.shadowColor = COLORS.mint;
+      ctx.shadowBlur = 6;
+      ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
+      ctx.restore();
+    }
+
+    // Score with neon text
+    juice.drawNeonText(ctx, `Fed: ${s.totalFed}`, 55, 40, COLORS.gold, 16);
 
     // Zone labels
-    ctx.font = '11px sans-serif';
+    ctx.font = `11px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.fillText('Adult L', w * 0.15, h - 20);
@@ -562,7 +686,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
     ctx.fillText('Adult R', w * 0.85, h - 20);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, feedChick]));
+  }, [phase, sounds, spawnParticles, feedChick, juice, haptics]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -579,6 +703,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       s.caughtInsect = null;
       s.gameOver = false;
       s.flashAlpha = 0;
+      s.warningPulse = 0;
       for (const ch of s.chicks) {
         ch.hunger = 80 + Math.random() * 20;
         ch.bounceT = 0;
@@ -607,36 +732,109 @@ export default function GameHelpersNest({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>
+          <div style={{
+            color: state.current.gameOver ? COLORS.red : COLORS.mint,
+            fontSize: 28,
+            fontWeight: 'bold',
+            marginBottom: 16,
+            textShadow: state.current.gameOver
+              ? `0 0 20px ${COLORS.red}, 0 0 40px ${COLORS.red}80`
+              : `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`,
+            fontFamily: FONT_FAMILY,
+          }}>
             {state.current.gameOver ? 'A chick starved!' : 'Time\'s Up!'}
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.gold,
+            fontSize: 20,
+            marginBottom: 8,
+            textShadow: `0 0 10px ${COLORS.gold}80`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Food delivered: {state.current.totalFed}
           </div>
-          <div style={{ color: COLORS.mint, fontSize: 18, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.mint,
+            fontSize: 18,
+            marginBottom: 8,
+            textShadow: `0 0 10px ${COLORS.mint}80`,
+            fontFamily: FONT_FAMILY,
+          }}>
             Chicks surviving: {surviving} / {NUM_CHICKS}
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white,
+            fontSize: 52,
+            fontWeight: 'bold',
+            marginBottom: 4,
+            textShadow: `0 0 30px ${COLORS.cyan}, 0 0 60px ${COLORS.cyan}60`,
+            fontFamily: FONT_FAMILY,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
-          <button onClick={() => onComplete(displayScore)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <div style={{
+            color: COLORS.gray,
+            fontSize: 14,
+            marginBottom: 28,
+            textTransform: 'uppercase',
+            letterSpacing: 3,
+            fontFamily: FONT_FAMILY,
+          }}>
+            points
+          </div>
+          <button onClick={() => {
+            sounds.success();
+            haptics.tapFeedback();
+            onComplete(displayScore);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+            color: COLORS.primary,
+            border: 'none',
+            padding: '14px 44px',
+            borderRadius: 14,
+            fontSize: 18,
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
+            textShadow: 'none',
+            letterSpacing: 0.5,
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+          <button onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.06)',
+            color: COLORS.gray,
+            border: `1px solid ${COLORS.gray}50`,
+            padding: '10px 32px',
+            borderRadius: 14,
+            fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            letterSpacing: 0.5,
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
         }}>Back</button>
       )}
     </div>
