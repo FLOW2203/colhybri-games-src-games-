@@ -2,6 +2,8 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
 const GAME_DURATION = 45;
@@ -10,6 +12,7 @@ const NUM_TOUCANS = 6;
 const POOL_SIZE = 100;
 const WIND_INTERVAL = 10;
 const TOUCAN_COLORS = ['#FF6B35', '#F7C948', '#2EC4B6', '#E71D36', '#7209B7', '#3A86FF'];
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 
 function drawToucan(ctx, x, y, rx, ry, bodyColor, beakColor, alpha) {
   ctx.save();
@@ -70,6 +73,8 @@ export default function GameDortoirA6({ onComplete, onBack }) {
   const [phase, setPhase] = useState('ready');
   const [displayScore, setDisplayScore] = useState(0);
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const makeToucans = useCallback(() => Array(NUM_TOUCANS).fill(null).map((_, i) => {
     const order = NUM_TOUCANS - i;
@@ -179,8 +184,10 @@ export default function GameDortoirA6({ onComplete, onBack }) {
       s.dragging = best;
       s.dragOffX = best.x - x;
       s.dragOffY = best.y - y;
+      haptics.tapFeedback();
+      sounds.pop();
     }
-  }, []);
+  }, [haptics, sounds]);
 
   const tryDrop = useCallback(() => {
     const s = state.current;
@@ -202,6 +209,9 @@ export default function GameDortoirA6({ onComplete, onBack }) {
         s.correctFlash = 0.4;
         spawnParticles(s.holeX, s.holeY, 10, [[46, 234, 163], [245, 166, 35], [255, 255, 255]]);
         sounds.chime();
+        haptics.successFeedback();
+        juice.flash('#2EEA83', 0.4);
+        juice.shake(4, 0.15);
       } else {
         // Wrong order: pop out
         t.popAnim = 1.0;
@@ -209,18 +219,27 @@ export default function GameDortoirA6({ onComplete, onBack }) {
         t.y = t.homeY;
         s.wrongFlash = 0.4;
         spawnParticles(s.holeX, s.holeY, 6, [[239, 68, 68], [255, 100, 100], [255, 200, 200]]);
-        sounds.tick();
+        sounds.fail();
+        haptics.failFeedback();
+        juice.flash('#EF4444', 0.5);
+        juice.shake(10, 0.3);
       }
     } else {
       t.x = t.homeX;
       t.y = t.homeY;
+      sounds.tick();
     }
-  }, [sounds, spawnParticles]);
+  }, [sounds, spawnParticles, haptics, juice]);
 
   const handleTap = useCallback((info) => {
-    if (phase === 'ready') { setPhase('playing'); return; }
+    if (phase === 'ready') {
+      setPhase('playing');
+      haptics.tapFeedback();
+      sounds.countdown(true);
+      return;
+    }
     if (phase === 'playing') tryPickup(info.x, info.y);
-  }, [phase, tryPickup]);
+  }, [phase, tryPickup, haptics, sounds]);
 
   const handleHoldStart = useCallback((info) => {
     if (phase === 'playing') tryPickup(info.x, info.y);
@@ -263,6 +282,9 @@ export default function GameDortoirA6({ onComplete, onBack }) {
 
     if (!s.layoutDone) layoutPositions(w, h);
 
+    // Update juice effects
+    juice.update(delta);
+
     // --- READY SCREEN ---
     if (phase === 'ready') {
       const bg = ctx.createLinearGradient(0, 0, 0, h);
@@ -272,23 +294,28 @@ export default function GameDortoirA6({ onComplete, onBack }) {
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+      // Neon title
+      juice.drawNeonText(ctx, 'Dortoir \u00e0 6', cx, h * 0.22, '#FF6B35', 28);
+
+      // Subtitle with glow
+      juice.drawGlow(ctx, cx, h * 0.32, 80, '#F7C948', 0.15);
+      ctx.font = `17px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('Dortoir \u00e0 6', cx, h * 0.22);
-      ctx.font = '17px sans-serif';
       ctx.fillStyle = COLORS.gold;
       ctx.fillText('Toucans sleep 6 in a tree hole', cx, h * 0.32);
       ctx.fillText('to stay warm!', cx, h * 0.32 + 24);
-      ctx.font = '14px sans-serif';
+
+      ctx.font = `14px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('DRAG toucans into the hole', cx, h * 0.45);
       ctx.fillText('Biggest first, smallest last!', cx, h * 0.45 + 22);
-      ctx.font = 'bold 20px sans-serif';
-      ctx.fillStyle = COLORS.white;
-      ctx.globalAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
-      ctx.fillText('TAP TO START', cx, h * 0.58);
+
+      // Pulsing neon "TAP TO START"
+      const pulse = 0.5 + Math.sin(elapsed * 4) * 0.5;
+      ctx.globalAlpha = pulse;
+      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.58, '#2EC4B6', 22);
       ctx.globalAlpha = 1;
+
       ctx.restore();
       return;
     }
@@ -306,11 +333,20 @@ export default function GameDortoirA6({ onComplete, onBack }) {
         s.windAlpha = 1.0;
         s.windDir = Math.random() > 0.5 ? 1 : -1;
         sounds.whoosh();
+        haptics.impactFeedback();
+        juice.shake(6, 0.25);
+        juice.flash('#AED9E0', 0.2);
       }
     }
     if (s.windActive) {
       s.windAlpha -= delta * 1.5;
       if (s.windAlpha <= 0) { s.windActive = false; s.windAlpha = 0; }
+    }
+
+    // Low time warning haptic
+    if (s.timeLeft < 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.tick();
     }
 
     s.wrongFlash *= Math.pow(0.01, delta);
@@ -335,10 +371,20 @@ export default function GameDortoirA6({ onComplete, onBack }) {
       const speedBonus = Math.max(1, 1 + s.timeLeft / GAME_DURATION);
       setPhase('ended');
       setDisplayScore(Math.round(s.temperature * speedBonus * s.placedCount));
+      if (s.placedCount === NUM_TOUCANS) {
+        sounds.success();
+        haptics.successFeedback();
+      } else {
+        sounds.fail();
+        haptics.failFeedback();
+      }
       return;
     }
 
     // --- RENDER ---
+    // Apply shake transform
+    juice.applyShake(ctx);
+
     const bg = ctx.createLinearGradient(0, 0, 0, h);
     bg.addColorStop(0, '#0B132B');
     bg.addColorStop(0.5, '#1C2541');
@@ -373,35 +419,53 @@ export default function GameDortoirA6({ onComplete, onBack }) {
     ctx.beginPath(); ctx.ellipse(hx, hy, hr + 8, (hr + 8) * 0.85, 0, 0, Math.PI * 2); ctx.fillStyle = '#2E1B0F'; ctx.fill();
     ctx.beginPath(); ctx.ellipse(hx, hy, hr, hr * 0.85, 0, 0, Math.PI * 2); ctx.fillStyle = '#1A0F05'; ctx.fill();
 
-    // Warm glow inside hole
+    // Warm glow inside hole (enhanced with juice.drawGlow)
     const warmth = Math.max(0, (s.temperature - 18) / (TARGET_TEMP - 18));
     if (warmth > 0) {
       const glow = ctx.createRadialGradient(hx, hy, 0, hx, hy, hr);
       glow.addColorStop(0, `rgba(255,140,50,${warmth * 0.3})`); glow.addColorStop(1, 'rgba(255,100,30,0)');
       ctx.fillStyle = glow; ctx.beginPath(); ctx.ellipse(hx, hy, hr, hr * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+      // Extra juice glow
+      juice.drawGlow(ctx, hx, hy, hr * 1.5, '#FF8C32', warmth * 0.25);
+    }
+
+    // Glow around hole when dragging near it
+    if (s.dragging) {
+      const distToHole = Math.sqrt((s.dragging.x - hx) ** 2 + (s.dragging.y - hy) ** 2);
+      if (distToHole < hr * 2.5) {
+        const proximity = 1 - (distToHole / (hr * 2.5));
+        juice.drawGlow(ctx, hx, hy, hr * 2, '#2EC4B6', proximity * 0.3);
+      }
     }
 
     // Draw all toucans (placed inside hole, unplaced around edges)
     for (const t of s.toucans) {
       if (t.placed) {
+        // Glow behind placed toucans
+        juice.drawGlow(ctx, t.x, t.y, t.rx * 1.5, t.color, 0.2);
         drawToucan(ctx, t.x, t.y + t.wobble, t.rx * 0.7, t.ry * 0.7, t.color, t.beakColor, 0.85);
       } else {
         const sc = t.popAnim > 0 ? 1 + t.popAnim * 0.3 : 1;
         const al = t.popAnim > 0 ? 0.6 + t.popAnim * 0.4 : 1;
+        // Glow on the dragged toucan
+        if (s.dragging === t) {
+          juice.drawGlow(ctx, t.x, t.y, t.rx * 2.5, t.color, 0.35);
+        }
         drawToucan(ctx, t.x, t.y + t.wobble, t.rx * sc, t.ry * sc, t.color, t.beakColor, al);
-        ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+        ctx.font = `bold 11px ${FONT_FAMILY}`; ctx.textAlign = 'center';
         ctx.fillStyle = COLORS.white; ctx.globalAlpha = 0.7;
         ctx.fillText(`#${t.order}`, t.x, t.y + t.ry + 14); ctx.globalAlpha = 1;
       }
     }
 
-    // Order hint
+    // Order hint (neon text)
     if (s.placedCount < NUM_TOUCANS) {
-      ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = COLORS.gold;
-      ctx.fillText(`Next: #${NUM_TOUCANS - s.placedCount}`, hx, hy + hr + 20);
+      juice.drawNeonText(ctx, `Next: #${NUM_TOUCANS - s.placedCount}`, hx, hy + hr + 22, '#F7C948', 13);
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const a = p.life / p.maxLife;
@@ -414,6 +478,7 @@ export default function GameDortoirA6({ onComplete, onBack }) {
         ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${a})`; ctx.fill();
       }
     }
+    ctx.restore();
 
     // Wind streaks
     if (s.windAlpha > 0.01) {
@@ -425,11 +490,12 @@ export default function GameDortoirA6({ onComplete, onBack }) {
       ctx.restore();
     }
 
-    // Flashes
+    // Flashes (original + juice overlay)
     if (s.wrongFlash > 0.01) { ctx.fillStyle = `rgba(239,68,68,${s.wrongFlash * 0.25})`; ctx.fillRect(0, 0, w, h); }
     if (s.correctFlash > 0.01) { ctx.fillStyle = `rgba(46,234,163,${s.correctFlash * 0.25})`; ctx.fillRect(0, 0, w, h); }
+    juice.drawFlash(ctx, w, h);
 
-    // Temperature gauge (right)
+    // Temperature gauge (right) with glow
     const gx = w - 30, gt = h * 0.15, gh = h * 0.35, gw = 18;
     ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.roundRect(gx - gw / 2, gt, gw, gh, 6); ctx.fill(); ctx.stroke();
@@ -438,32 +504,37 @@ export default function GameDortoirA6({ onComplete, onBack }) {
     const tg = ctx.createLinearGradient(0, gt + gh - fH, 0, gt + gh);
     tg.addColorStop(0, '#FF6B35'); tg.addColorStop(1, '#E71D36'); ctx.fillStyle = tg;
     ctx.beginPath(); ctx.roundRect(gx - gw / 2 + 2, gt + gh - fH + 2, gw - 4, Math.max(0, fH - 4), 4); ctx.fill();
-    // Thermometer bulb
+    // Thermometer bulb with glow
     ctx.beginPath(); ctx.arc(gx, gt + gh + 14, 10, 0, Math.PI * 2);
-    ctx.fillStyle = s.temperature >= TARGET_TEMP ? COLORS.red : '#FF6B35'; ctx.fill();
-    ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = COLORS.white;
-    ctx.fillText(`${Math.round(s.temperature)}\u00b0C`, gx, gt - 10);
-    ctx.font = '10px sans-serif'; ctx.fillStyle = COLORS.gold;
+    const bulbColor = s.temperature >= TARGET_TEMP ? COLORS.red : '#FF6B35';
+    ctx.fillStyle = bulbColor; ctx.fill();
+    juice.drawGlow(ctx, gx, gt + gh + 14, 20, bulbColor, 0.3);
+
+    // Temperature text (neon)
+    juice.drawNeonText(ctx, `${Math.round(s.temperature)}\u00b0C`, gx, gt - 10, '#FF6B35', 15);
+    ctx.font = `10px ${FONT_FAMILY}`; ctx.textAlign = 'center'; ctx.fillStyle = COLORS.gold;
     ctx.fillText(`Goal: ${TARGET_TEMP}\u00b0`, gx, gt + 4);
 
     // HUD: placed count, timer bar, timer text
-    ctx.font = '15px sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = COLORS.white;
+    ctx.font = `15px ${FONT_FAMILY}`; ctx.textAlign = 'left'; ctx.fillStyle = COLORS.white;
     ctx.fillText(`Toucans: ${s.placedCount}/${NUM_TOUCANS}`, 20, h * 0.15 - 5);
     ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(0, 0, w, 4);
     ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
     ctx.fillRect(0, 0, w * (s.timeLeft / GAME_DURATION), 4);
-    ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 20, 40);
 
-    // Wind warning
+    // Timer (neon when low)
+    const timerColor = s.timeLeft < 5 ? '#EF4444' : '#FFFFFF';
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 20, 36, timerColor, 24);
+
+    // Wind warning (neon)
     if (s.windTimer < 2 && !s.windActive) {
-      ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = COLORS.gold;
-      ctx.globalAlpha = 0.5 + Math.sin(elapsed * 8) * 0.5; ctx.fillText('WIND INCOMING!', cx, 65); ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.5 + Math.sin(elapsed * 8) * 0.5;
+      juice.drawNeonText(ctx, 'WIND INCOMING!', cx, 65, '#F7C948', 15);
+      ctx.globalAlpha = 1;
     }
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, layoutPositions]));
+  }, [phase, sounds, spawnParticles, layoutPositions, juice, haptics]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -494,6 +565,8 @@ export default function GameDortoirA6({ onComplete, onBack }) {
 
   useEffect(() => () => gameLoop.stop(), [gameLoop]);
 
+  const allPlaced = state.current.placedCount === NUM_TOUCANS;
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
@@ -501,29 +574,60 @@ export default function GameDortoirA6({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>
-            Results
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
+            textShadow: allPlaced
+              ? '0 0 20px rgba(46,234,163,0.8), 0 0 40px rgba(46,234,163,0.4)'
+              : '0 0 20px rgba(239,68,68,0.6), 0 0 40px rgba(239,68,68,0.3)',
+            fontFamily: FONT_FAMILY,
+          }}>
+            {allPlaced ? 'All Warm!' : 'Results'}
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.gold, fontSize: 20, marginBottom: 8,
+            textShadow: '0 0 10px rgba(247,201,72,0.5)',
+            fontFamily: FONT_FAMILY,
+          }}>
             {state.current.placedCount}/{NUM_TOUCANS} toucans placed
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 18, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.cyan, fontSize: 18, marginBottom: 8,
+            textShadow: '0 0 10px rgba(46,196,182,0.5)',
+            fontFamily: FONT_FAMILY,
+          }}>
             Temperature: {Math.round(state.current.temperature)}&deg;C
           </div>
-          <div style={{ color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4,
+            textShadow: '0 0 30px rgba(255,255,255,0.6), 0 0 60px rgba(46,234,163,0.4)',
+            fontFamily: FONT_FAMILY,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
+          <div style={{
+            color: COLORS.gray, fontSize: 14, marginBottom: 24,
+            fontFamily: FONT_FAMILY,
+          }}>points</div>
           <button onClick={() => onComplete(displayScore)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
+            background: 'linear-gradient(135deg, #2EC4B6, #2EEA83)',
+            color: '#0B132B', border: 'none',
             padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
             cursor: 'pointer', marginBottom: 12,
+            boxShadow: '0 0 20px rgba(46,196,182,0.4), 0 4px 15px rgba(0,0,0,0.3)',
+            textShadow: 'none',
+            fontFamily: FONT_FAMILY,
           }}>Continue</button>
           <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))',
+            color: COLORS.gray, border: '1px solid rgba(255,255,255,0.15)',
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+            boxShadow: '0 0 10px rgba(255,255,255,0.05)',
+            fontFamily: FONT_FAMILY,
           }}>Back</button>
         </div>
       )}
@@ -532,6 +636,7 @@ export default function GameDortoirA6({ onComplete, onBack }) {
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
         }}>Back</button>
       )}
     </div>

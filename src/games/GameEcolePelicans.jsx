@@ -2,8 +2,11 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import useGameLoop from './engine/useGameLoop';
 import useTouch from './engine/useTouch';
 import useSounds from './engine/useSounds';
+import useHaptics from './engine/useHaptics';
+import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
 
+const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
 const GAME_DURATION = 45;
 const POOL_SIZE = 100;
 const DIRECTIONS = ['up', 'down', 'left', 'right'];
@@ -19,6 +22,8 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
   const [displayScore, setDisplayScore] = useState(0);
 
   const sounds = useSounds();
+  const haptics = useHaptics();
+  const juice = useJuice();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -99,7 +104,11 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
 
   const handleSwipe = useCallback((direction) => {
     if (phase !== 'playing') {
-      if (phase === 'ready') setPhase('playing');
+      if (phase === 'ready') {
+        setPhase('playing');
+        haptics.tapFeedback();
+        sounds.pop();
+      }
       return;
     }
     const s = state.current;
@@ -107,13 +116,16 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
 
     s.lastSwipeDir = direction;
     s.lastSwipeTime = performance.now();
+    haptics.tapFeedback();
 
     const expected = s.sequence[s.playerIndex];
     if (direction === expected) {
       sounds.tick();
+      sounds.pop();
       s.playerIndex++;
       s.flashColor = 'green';
       s.flashAlpha = 0.15;
+      juice.flash('#22C55E', 0.2);
 
       if (s.playerIndex >= s.sequence.length) {
         // Round complete
@@ -122,6 +134,10 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
         s.score = s.roundsCompleted * s.fishCaught;
         s.seqLength++;
         sounds.chime();
+        sounds.success();
+        haptics.successFeedback();
+        juice.flash('#2EEAA3', 0.35);
+        juice.shake(6, 0.2);
         const canvas = canvasRef.current;
         const dpr = window.devicePixelRatio || 1;
         const w = canvas ? canvas.width / dpr : 400;
@@ -136,8 +152,14 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
       s.flashColor = 'red';
       s.flashAlpha = 0.25;
       sounds.splash();
+      sounds.fail();
+      haptics.failFeedback();
+      juice.flash('#EF4444', 0.4);
+      juice.shake(12, 0.35);
 
       if (s.lives <= 0) {
+        haptics.heavyFeedback();
+        sounds.impact();
         setPhase('ended');
         setDisplayScore(s.score);
         return;
@@ -148,11 +170,15 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
       s.demoTimer = 0;
       s.gamePhase = 'demo';
     }
-  }, [phase, sounds, spawnSplash, startNewRound]);
+  }, [phase, sounds, haptics, juice, spawnSplash, startNewRound]);
 
   const handleTap = useCallback(() => {
-    if (phase === 'ready') setPhase('playing');
-  }, [phase]);
+    if (phase === 'ready') {
+      setPhase('playing');
+      haptics.tapFeedback();
+      sounds.pop();
+    }
+  }, [phase, haptics, sounds]);
 
   useTouch(canvasRef, { onSwipe: handleSwipe, onTap: handleTap });
 
@@ -224,6 +250,12 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
     ctx.save();
     ctx.scale(dpr, dpr);
 
+    // Update juice system
+    juice.update(delta);
+
+    // Apply screen shake
+    juice.applyShake(ctx);
+
     const s = state.current;
     const cx = w / 2;
 
@@ -240,27 +272,37 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
       ctx.fillStyle = '#1a5070';
       ctx.fillRect(0, h * 0.75, w, h * 0.25);
 
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 26px sans-serif';
+      // Title with neon text
+      juice.drawNeonText(ctx, '\u00C9cole des P\u00E9licans', cx, h * 0.3, COLORS.cyan, 26);
+
+      // Glow behind title
+      juice.drawGlow(ctx, cx, h * 0.3, 120, COLORS.cyan, 0.15);
+
+      ctx.font = `17px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
-      ctx.fillText('\u00C9cole des P\u00E9licans', cx, h * 0.3);
-      ctx.font = '17px sans-serif';
       ctx.fillStyle = COLORS.cyan;
       ctx.fillText('Watch the elder pelican\'s fishing', cx, h * 0.38);
       ctx.fillText('sequence, then repeat it by swiping!', cx, h * 0.42);
-      ctx.font = '15px sans-serif';
+      ctx.font = `15px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Swipe: UP / DOWN / LEFT / RIGHT', cx, h * 0.50);
       ctx.fillText(`${MAX_LIVES} lives \u2022 ${GAME_DURATION}s timer`, cx, h * 0.54);
-      ctx.fillStyle = COLORS.white;
-      ctx.font = 'bold 20px sans-serif';
+
+      // Pulsing TAP TO START with neon
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      ctx.fillText('TAP TO START', cx, h * 0.65);
+      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.65, COLORS.mint, 20);
       ctx.globalAlpha = 1;
+
+      // Glow under pelicans
+      juice.drawGlow(ctx, cx - 60, h * 0.2, 50, COLORS.gold, 0.12);
+      juice.drawGlow(ctx, cx + 60, h * 0.2, 40, COLORS.cyan, 0.10);
 
       drawPelican(ctx, cx - 60, h * 0.2, 0.7, true, elapsed * 2);
       drawPelican(ctx, cx + 60, h * 0.2, 0.6, false, elapsed * 2.5);
+
+      // Draw juice flash overlay
+      juice.drawFlash(ctx, w, h);
 
       ctx.restore();
       return;
@@ -272,6 +314,12 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
     s.elderBobTime += delta * 2.5;
     s.youngBobTime += delta * 3;
 
+    // Low time warning haptic
+    if (s.timeLeft <= 5 && s.timeLeft > 0 && Math.floor(s.timeLeft) !== Math.floor(s.timeLeft + delta)) {
+      haptics.warningFeedback();
+      sounds.countdown(s.timeLeft <= 1);
+    }
+
     // Demo phase logic
     if (s.gamePhase === 'demo') {
       s.demoTimer += delta;
@@ -280,7 +328,12 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
       if (newIndex >= s.sequence.length) {
         s.gamePhase = 'player';
         s.playerIndex = 0;
+        sounds.whoosh();
       } else {
+        if (newIndex !== s.demoIndex) {
+          sounds.drop();
+          haptics.tapFeedback();
+        }
         s.demoIndex = newIndex;
         s.demoArrowAlpha = 1 - ((s.demoTimer % stepDuration) / stepDuration) * 0.5;
       }
@@ -303,6 +356,8 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
     // Game over by time
     if (s.timeLeft <= 0 && phase === 'playing') {
       s.score = s.roundsCompleted * s.fishCaught;
+      haptics.heavyFeedback();
+      sounds.impact();
       setPhase('ended');
       setDisplayScore(s.score);
       ctx.restore();
@@ -318,7 +373,8 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // Sun
+    // Sun with glow
+    juice.drawGlow(ctx, w * 0.85, h * 0.1, 60, '#FFE080', 0.25);
     ctx.beginPath();
     ctx.arc(w * 0.85, h * 0.1, 35, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,220,100,0.4)';
@@ -349,73 +405,83 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
       ctx.fill();
     }
 
-    // Flash overlay
+    // Flash overlay (original)
     if (s.flashAlpha > 0.01) {
       const fc = s.flashColor === 'green' ? '46,234,163' : '239,68,68';
       ctx.fillStyle = `rgba(${fc},${s.flashAlpha})`;
       ctx.fillRect(0, 0, w, h);
     }
 
-    // Elder pelican (top)
+    // Juice flash overlay (from useJuice)
+    juice.drawFlash(ctx, w, h);
+
+    // Elder pelican (top) with glow
     const elderX = cx - 40;
     const elderYBase = h * 0.18;
     const elderBob = Math.sin(s.elderBobTime) * 5;
+    juice.drawGlow(ctx, elderX, elderYBase + elderBob, 45, COLORS.gold, 0.12);
     drawPelican(ctx, elderX, elderYBase + elderBob, 0.85, true, s.elderBobTime);
 
-    // Label
-    ctx.font = '13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.gold;
-    ctx.fillText('Elder', elderX, elderYBase + 45);
+    // Label with neon
+    juice.drawNeonText(ctx, 'Elder', elderX, elderYBase + 45, COLORS.gold, 13);
 
-    // Young pelican (center)
+    // Young pelican (center) with glow
     const youngX = cx + 30;
     const youngYBase = h * 0.45;
     const youngBob = Math.sin(s.youngBobTime) * 4;
+    juice.drawGlow(ctx, youngX, youngYBase + youngBob, 38, COLORS.cyan, 0.10);
     drawPelican(ctx, youngX, youngYBase + youngBob, 0.7, false, s.youngBobTime);
 
-    ctx.fillStyle = COLORS.cyan;
-    ctx.fillText('You', youngX, youngYBase + 38);
+    juice.drawNeonText(ctx, 'You', youngX, youngYBase + 38, COLORS.cyan, 13);
 
     // Demo phase: show arrows near elder
     if (s.gamePhase === 'demo' && s.demoIndex < s.sequence.length) {
       const dir = s.sequence[s.demoIndex];
       const arrowX = elderX + 80;
       const arrowY = elderYBase + elderBob;
+
+      // Glow around demo arrow
+      juice.drawGlow(ctx, arrowX, arrowY, 35, COLORS.cyan, 0.25 * s.demoArrowAlpha);
       drawArrow(ctx, arrowX, arrowY, dir, s.demoArrowAlpha, 28);
 
       // Show sequence progress dots
       const dotY = elderYBase + 60;
       for (let i = 0; i < s.sequence.length; i++) {
+        const dotX = cx - (s.sequence.length * 8) + i * 16;
+        if (i === s.demoIndex) {
+          juice.drawGlow(ctx, dotX, dotY, 12, COLORS.cyan, 0.3);
+        }
         ctx.beginPath();
-        ctx.arc(cx - (s.sequence.length * 8) + i * 16, dotY, 4, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
         ctx.fillStyle = i === s.demoIndex ? COLORS.cyan : 'rgba(255,255,255,0.3)';
         ctx.fill();
       }
 
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.gold;
-      ctx.fillText('WATCH!', cx, h * 0.33);
+      // WATCH! with neon
+      juice.drawNeonText(ctx, 'WATCH!', cx, h * 0.33, COLORS.gold, 16);
     }
 
     // Player phase: show progress and prompt
     if (s.gamePhase === 'player') {
-      ctx.font = 'bold 16px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = COLORS.mint;
-      ctx.fillText('YOUR TURN! Swipe the sequence', cx, h * 0.33);
+      juice.drawNeonText(ctx, 'YOUR TURN! Swipe the sequence', cx, h * 0.33, COLORS.mint, 16);
 
       // Sequence dots (filled = completed)
       const dotY = h * 0.36;
       for (let i = 0; i < s.sequence.length; i++) {
-        ctx.beginPath();
-        ctx.arc(cx - (s.sequence.length * 8) + i * 16, dotY, 5, 0, Math.PI * 2);
+        const dotX = cx - (s.sequence.length * 8) + i * 16;
         if (i < s.playerIndex) {
+          juice.drawGlow(ctx, dotX, dotY, 10, COLORS.mint, 0.3);
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
           ctx.fillStyle = COLORS.mint;
         } else if (i === s.playerIndex) {
+          juice.drawGlow(ctx, dotX, dotY, 14, COLORS.cyan, 0.35);
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
           ctx.fillStyle = COLORS.cyan;
         } else {
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(255,255,255,0.2)';
         }
         ctx.fill();
@@ -425,6 +491,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
       if (s.playerIndex < s.sequence.length) {
         const hintDir = s.sequence[s.playerIndex];
         const hintAlpha = 0.3 + Math.sin(elapsed * 5) * 0.15;
+        juice.drawGlow(ctx, youngX + 70, youngYBase + youngBob, 25, COLORS.cyan, hintAlpha * 0.3);
         drawArrow(ctx, youngX + 70, youngYBase + youngBob, hintDir, hintAlpha, 20);
       }
     }
@@ -432,10 +499,13 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
     // Last swipe indicator
     if (s.lastSwipeDir && performance.now() - s.lastSwipeTime < 400) {
       const fade = 1 - (performance.now() - s.lastSwipeTime) / 400;
+      juice.drawGlow(ctx, youngX - 60, youngYBase + youngBob, 30, COLORS.mint, fade * 0.3);
       drawArrow(ctx, youngX - 60, youngYBase + youngBob, s.lastSwipeDir, fade * 0.8, 24);
     }
 
-    // Particles
+    // Particles with additive blending
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const p of s.particles) {
       if (!p.active) continue;
       const alpha = p.life / p.maxLife;
@@ -453,28 +523,30 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
         ctx.fill();
       }
     }
+    ctx.restore();
 
     // HUD - Timer bar
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(0, 0, w, 4);
     const timerFrac = s.timeLeft / GAME_DURATION;
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.cyan;
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, w * timerFrac, 4);
 
-    // Timer text
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
-    ctx.fillText(`${Math.ceil(s.timeLeft)}s`, w - 16, 36);
+    // Glow on timer bar tip
+    if (timerFrac > 0.01) {
+      juice.drawGlow(ctx, w * timerFrac, 2, 15, timerColor, 0.4);
+    }
 
-    // Score
-    ctx.font = 'bold 18px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 60, 36);
+    // Timer text with neon
+    juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 36, s.timeLeft < 5 ? COLORS.red : COLORS.white, 22);
+
+    // Score with neon
+    juice.drawNeonText(ctx, `Score: ${s.score}`, 90, 36, COLORS.white, 18);
 
     // Lives
-    ctx.font = '16px sans-serif';
+    ctx.font = `16px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.red;
     let livesText = '';
     for (let i = 0; i < MAX_LIVES; i++) {
@@ -482,20 +554,21 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
     }
     ctx.fillText(livesText, 60, 58);
 
-    // Round info
-    ctx.font = '14px sans-serif';
-    ctx.fillStyle = COLORS.gray;
-    ctx.textAlign = 'center';
-    ctx.fillText(`Round ${s.roundsCompleted + 1} \u2022 Sequence: ${s.seqLength}`, cx, h - 20);
+    // Glow behind lives
+    juice.drawGlow(ctx, 80, 55, 30, COLORS.red, 0.08);
+
+    // Round info with neon
+    juice.drawNeonText(ctx, `Round ${s.roundsCompleted + 1} \u2022 Sequence: ${s.seqLength}`, cx, h - 20, COLORS.gray, 14);
 
     // Fish caught display
-    ctx.font = '14px sans-serif';
+    ctx.font = `14px ${FONT_FAMILY}`;
     ctx.fillStyle = COLORS.gold;
     ctx.textAlign = 'right';
     ctx.fillText(`\uD83D\uDC1F ${s.fishCaught}`, w - 16, 58);
+    juice.drawGlow(ctx, w - 35, 55, 20, COLORS.gold, 0.1);
 
     ctx.restore();
-  }, [phase, drawPelican, drawArrow]));
+  }, [phase, drawPelican, drawArrow, juice, haptics, sounds]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -533,36 +606,81 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          fontFamily: FONT_FAMILY,
         }}>
-          <div style={{ color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
+            textShadow: `0 0 20px ${state.current.lives <= 0 ? COLORS.red : COLORS.cyan}, 0 0 40px ${state.current.lives <= 0 ? COLORS.red : COLORS.cyan}50`,
+          }}>
             {state.current.lives <= 0 ? 'No Lives Left!' : 'Time\'s Up!'}
           </div>
-          <div style={{ color: COLORS.gold, fontSize: 20, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.gold, fontSize: 20, marginBottom: 8,
+            textShadow: `0 0 12px ${COLORS.gold}80`,
+          }}>
             Rounds: {state.current.roundsCompleted}
           </div>
-          <div style={{ color: COLORS.cyan, fontSize: 18, marginBottom: 8 }}>
+          <div style={{
+            color: COLORS.cyan, fontSize: 18, marginBottom: 8,
+            textShadow: `0 0 12px ${COLORS.cyan}80`,
+          }}>
             Fish caught: {state.current.fishCaught}
           </div>
-          <div style={{ color: COLORS.white, fontSize: 48, fontWeight: 'bold', marginBottom: 4 }}>
+          <div style={{
+            color: COLORS.white, fontSize: 48, fontWeight: 'bold', marginBottom: 4,
+            textShadow: `0 0 30px ${COLORS.cyan}, 0 0 60px ${COLORS.cyan}40`,
+          }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
-          <button onClick={() => onComplete(state.current.score)} style={{
-            background: COLORS.cyan, color: COLORS.primary, border: 'none',
-            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold', cursor: 'pointer', marginBottom: 12,
+          <div style={{
+            color: COLORS.gray, fontSize: 14, marginBottom: 24,
+            textShadow: `0 0 8px ${COLORS.gray}60`,
+          }}>points</div>
+          <button onClick={() => {
+            haptics.tapFeedback();
+            sounds.chime();
+            onComplete(state.current.score);
+          }} style={{
+            background: `linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.mint})`,
+            color: COLORS.primary,
+            border: 'none',
+            padding: '14px 40px', borderRadius: 12, fontSize: 18, fontWeight: 'bold',
+            cursor: 'pointer', marginBottom: 12,
+            fontFamily: FONT_FAMILY,
+            boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
+            textShadow: 'none',
           }}>Continue</button>
-          <button onClick={onBack} style={{
-            background: 'transparent', color: COLORS.gray, border: `1px solid ${COLORS.gray}`,
-            padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
+          <button onClick={() => {
+            haptics.tapFeedback();
+            onBack();
+          }} style={{
+            background: 'rgba(255,255,255,0.05)',
+            color: COLORS.gray,
+            border: `1px solid ${COLORS.gray}50`,
+            padding: '10px 30px', borderRadius: 12, fontSize: 14,
+            cursor: 'pointer',
+            fontFamily: FONT_FAMILY,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+            textShadow: `0 0 8px ${COLORS.gray}40`,
           }}>Back</button>
         </div>
       )}
       {phase !== 'ended' && (
-        <button onClick={onBack} style={{
+        <button onClick={() => {
+          haptics.tapFeedback();
+          onBack();
+        }} style={{
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.1)',
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
+          fontFamily: FONT_FAMILY,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
         }}>Back</button>
       )}
     </div>
