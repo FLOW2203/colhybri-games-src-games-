@@ -352,15 +352,15 @@ export default function GameTorpeur({ onComplete, onBack }) {
     const coldBot = [20, 40, 80];
 
     const lerp = (a, b, t2) => a + (b - a) * t2;
-    const topR = lerp(warmTop[0], coldTop[0], t);
-    const topG = lerp(warmTop[1], coldTop[1], t);
-    const topB = lerp(warmTop[2], coldTop[2], t);
-    const midR = lerp(warmMid[0], coldMid[0], t);
-    const midG = lerp(warmMid[1], coldMid[1], t);
-    const midB = lerp(warmMid[2], coldMid[2], t);
-    const botR = lerp(warmBot[0], coldBot[0], t);
-    const botG = lerp(warmBot[1], coldBot[1], t);
-    const botB = lerp(warmBot[2], coldBot[2], t);
+    const topR = lerp(warmTop[0], coldTop[0], bt);
+    const topG = lerp(warmTop[1], coldTop[1], bt);
+    const topB = lerp(warmTop[2], coldTop[2], bt);
+    const midR = lerp(warmMid[0], coldMid[0], bt);
+    const midG = lerp(warmMid[1], coldMid[1], bt);
+    const midB = lerp(warmMid[2], coldMid[2], bt);
+    const botR = lerp(warmBot[0], coldBot[0], bt);
+    const botG = lerp(warmBot[1], coldBot[1], bt);
+    const botB = lerp(warmBot[2], coldBot[2], bt);
 
     bgGrad.addColorStop(0, `rgb(${topR},${topG},${topB})`);
     bgGrad.addColorStop(0.5, `rgb(${midR},${midG},${midB})`);
@@ -369,38 +369,38 @@ export default function GameTorpeur({ onComplete, onBack }) {
     ctx.fillRect(0, 0, w, h);
 
     // Stars (visible in cold/night)
-    if (t > 0.2) {
+    if (bt > 0.2) {
       for (const star of s.stars) {
         const twinkle = 0.3 + Math.sin(elapsed * 2 + star.twinkle) * 0.7;
         ctx.beginPath();
         ctx.arc(star.x % w, star.y, star.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${twinkle * (t - 0.2) * 1.25})`;
+        ctx.fillStyle = `rgba(255,255,255,${twinkle * (bt - 0.2) * 1.25})`;
         ctx.fill();
       }
     }
 
     // Sun/Moon
-    const celestialY = 60 + t * 40;
+    const celestialY = 60 + bt * 40;
     const celestialR = 30;
-    if (t < 0.5) {
+    if (bt < 0.5) {
       // Sun with glow
       const sunGrad = ctx.createRadialGradient(w * 0.8, celestialY, 0, w * 0.8, celestialY, celestialR * 2);
-      sunGrad.addColorStop(0, `rgba(255,200,50,${1 - t * 2})`);
-      sunGrad.addColorStop(0.5, `rgba(255,150,30,${(1 - t * 2) * 0.5})`);
+      sunGrad.addColorStop(0, `rgba(255,200,50,${1 - bt * 2})`);
+      sunGrad.addColorStop(0.5, `rgba(255,150,30,${(1 - bt * 2) * 0.5})`);
       sunGrad.addColorStop(1, 'rgba(255,100,0,0)');
       ctx.fillStyle = sunGrad;
       ctx.beginPath();
       ctx.arc(w * 0.8, celestialY, celestialR * 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(w * 0.8, celestialY, celestialR * (1 - t), 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,220,100,${1 - t * 2})`;
+      ctx.arc(w * 0.8, celestialY, celestialR * (1 - bt), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,220,100,${1 - bt * 2})`;
       ctx.fill();
       // Additive sun glow
-      juice.drawGlow(ctx, w * 0.8, celestialY, celestialR * 3, '#FFAA00', (1 - t * 2) * 0.2);
+      juice.drawGlow(ctx, w * 0.8, celestialY, celestialR * 3, '#FFAA00', (1 - bt * 2) * 0.2);
     } else {
       // Moon with glow
-      const moonAlpha = (t - 0.5) * 2;
+      const moonAlpha = (bt - 0.5) * 2;
       ctx.beginPath();
       ctx.arc(w * 0.8, celestialY, celestialR * 0.8, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(200,210,230,${moonAlpha * 0.8})`;
@@ -414,11 +414,11 @@ export default function GameTorpeur({ onComplete, onBack }) {
     }
 
     // Snowflakes
-    if (t > 0.1) {
+    if (bt > 0.1) {
       for (const sf of s.snowflakes) {
         ctx.beginPath();
         ctx.arc(sf.x, sf.y, sf.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(200,220,255,${t * 0.4})`;
+        ctx.fillStyle = `rgba(200,220,255,${bt * 0.4})`;
         ctx.fill();
       }
     }

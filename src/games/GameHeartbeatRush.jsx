@@ -253,7 +253,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
 
       const tapAlpha = 0.4 + Math.sin(elapsed * 4) * 0.6;
       ctx.globalAlpha = Math.max(0, tapAlpha);
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + baseR + 155, '#2EEAA3', 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart).toUpperCase(), cx, cy + baseR + 155, '#2EEAA3', 20);
       ctx.globalAlpha = 1;
 
       ctx.restore();
@@ -485,8 +485,8 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
     if (s.lastTapResultTimer > 0) {
       const alpha = Math.min(1, s.lastTapResultTimer * 2);
       const yOffset = (1 - alpha) * -30;
-      const resultColor = s.lastTapResult === 'PERFECT!' ? '#2EEAA3'
-        : s.lastTapResult === 'GOOD' ? '#F5A623' : '#FF4444';
+      const resultColor = s.lastTapResult === t(UI_STRINGS.perfect) ? '#2EEAA3'
+        : s.lastTapResult === t(UI_STRINGS.good) ? '#F5A623' : '#FF4444';
       ctx.globalAlpha = alpha;
       juice.drawNeonText(ctx, s.lastTapResult, cx, cy + radius + 65 + yOffset, resultColor, 34);
       ctx.globalAlpha = 1;
@@ -498,7 +498,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
     }
 
     // BPM display
-    ctx.font = '14px -apple-system, sans-serif';
+    ctx.font = "14px 'Outfit', 'DM Sans', sans-serif";
     ctx.textAlign = 'center';
     ctx.fillStyle = '#667';
     ctx.fillText(`${Math.round(s.bpm)} BPM`, cx, cy + radius + 110);
@@ -534,7 +534,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
     }
 
     // Timer text
-    ctx.font = 'bold 22px -apple-system, sans-serif';
+    ctx.font = "bold 22px 'Outfit', 'DM Sans', sans-serif";
     ctx.textAlign = 'right';
     ctx.fillStyle = s.timeLeft < 5 ? '#FF4444' : '#FFFFFF';
     ctx.shadowColor = s.timeLeft < 5 ? '#FF4444' : '#2EEAA3';
@@ -543,14 +543,14 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
     ctx.shadowBlur = 0;
 
     // Score
-    ctx.font = 'bold 22px -apple-system, sans-serif';
+    ctx.font = "bold 22px 'Outfit', 'DM Sans', sans-serif";
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FFFFFF';
     ctx.shadowColor = '#2EEAA3';
     ctx.shadowBlur = 6;
     ctx.fillText(`${s.score}`, 16, 36);
     ctx.shadowBlur = 0;
-    ctx.font = '12px -apple-system, sans-serif';
+    ctx.font = "12px 'Outfit', 'DM Sans', sans-serif";
     ctx.fillStyle = '#667';
     ctx.fillText('pts', 16 + ctx.measureText(`${s.score}`).width + 4, 36);
 
@@ -599,12 +599,12 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)',
         }}>
-          <div style={{ color: '#AAB', fontSize: 16, letterSpacing: 4, marginBottom: 8, textTransform: 'uppercase' }}>Time's Up</div>
+          <div style={{ color: '#AAB', fontSize: 16, letterSpacing: 4, marginBottom: 8, textTransform: 'uppercase' }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.mint, fontSize: 56, fontWeight: 'bold', marginBottom: 4,
             textShadow: '0 0 30px rgba(46,234,163,0.5)',
           }}>{displayScore}</div>
-          <div style={{ color: '#667', fontSize: 14, marginBottom: 4 }}>Best Streak: {state.current.bestStreak}</div>
+          <div style={{ color: '#667', fontSize: 14, marginBottom: 4 }}>{t(UI_STRINGS.bestStreak)}: {state.current.bestStreak}</div>
           <div style={{ color: '#556', fontSize: 13, marginBottom: 32 }}>
             A hummingbird heart: 1,260 BPM!
           </div>

@@ -5,8 +5,69 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
+
+const GAME_STRINGS = {
+  courtshipDesc1: {
+    fr: 'Les toucans se lancent des fruits', en: 'Toucans toss fruit as',
+    es: 'Los tucanes lanzan fruta como', de: 'Tukane werfen Früchte als',
+    el: 'Οι τουκάν ρίχνουν φρούτα ως', zh: '巨嘴鸟互扔水果作为',
+    ja: 'オオハシは求愛の', hi: 'टूकन फल फेंकते हैं',
+    pt: 'Os tucanos lançam frutas como', ru: 'Туканы бросают фрукты как',
+  },
+  courtshipDesc2: {
+    fr: 'comme rituel de séduction !', en: 'a courtship ritual!',
+    es: 'un ritual de cortejo!', de: 'Balzritual!',
+    el: 'τελετή ερωτοτροπίας!', zh: '求偶仪式！',
+    ja: '儀式として果物を投げます！', hi: 'प्रणय अनुष्ठान के रूप में!',
+    pt: 'um ritual de acasalamento!', ru: 'брачный ритуал!',
+  },
+  swipeInstruction: {
+    fr: 'Glissez pour lancer, tapez pour attraper !', en: 'Swipe to throw, tap to catch!',
+    es: '¡Desliza para lanzar, toca para atrapar!', de: 'Wische zum Werfen, tippe zum Fangen!',
+    el: 'Σύρετε για να ρίξετε, πατήστε για να πιάσετε!', zh: '滑动投掷，点击接住！',
+    ja: 'スワイプで投げて、タップでキャッチ！', hi: 'फेंकने के लिए स्वाइप करें, पकड़ने के लिए टैप करें!',
+    pt: 'Deslize para lançar, toque para apanhar!', ru: 'Свайпните, чтобы бросить, нажмите, чтобы поймать!',
+  },
+  tap: {
+    fr: 'TAP !', en: 'TAP!',
+    es: '¡TOCA!', de: 'TIPP!',
+    el: 'ΠΑΤ!', zh: '点击！',
+    ja: 'タップ！', hi: 'टैप!',
+    pt: 'TOQUE!', ru: 'ЖМИ!',
+  },
+  catch: {
+    fr: 'Attrapé !', en: 'Catch!',
+    es: '¡Atrapado!', de: 'Gefangen!',
+    el: 'Πιάστηκε!', zh: '接住了！',
+    ja: 'キャッチ！', hi: 'पकड़ा!',
+    pt: 'Apanhado!', ru: 'Поймано!',
+  },
+  exchangesCompleted: {
+    fr: 'échanges réussis', en: 'exchanges completed',
+    es: 'intercambios completados', de: 'Austausche abgeschlossen',
+    el: 'ανταλλαγές ολοκληρώθηκαν', zh: '次交换完成',
+    ja: '回の交換成功', hi: 'आदान-प्रदान पूरे',
+    pt: 'trocas concluídas', ru: 'обменов завершено',
+  },
+  tossLoveFact: {
+    fr: 'Les toucans se lancent des fruits par amour !', en: 'Toucans toss fruit to show love!',
+    es: '¡Los tucanes lanzan fruta por amor!', de: 'Tukane werfen Früchte aus Liebe!',
+    el: 'Οι τουκάν ρίχνουν φρούτα για αγάπη!', zh: '巨嘴鸟通过抛水果来表达爱意！',
+    ja: 'オオハシは愛を示すためにフルーツを投げます！', hi: 'टूकन प्यार दिखाने के लिए फल फेंकते हैं!',
+    pt: 'Os tucanos lançam frutas para mostrar amor!', ru: 'Туканы бросают фрукты, чтобы показать любовь!',
+  },
+  speed: {
+    fr: 'Vitesse', en: 'Speed',
+    es: 'Velocidad', de: 'Geschwindigkeit',
+    el: 'Ταχύτητα', zh: '速度',
+    ja: 'スピード', hi: 'गति',
+    pt: 'Velocidade', ru: 'Скорость',
+  },
+};
 const GAME_DURATION = 15;
 const POOL_SIZE = 100;
 const FRUIT_COLORS = [
@@ -25,6 +86,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -152,7 +214,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       s.streak++;
       if (s.streak > s.bestStreak) s.bestStreak = s.streak;
       s.speed = Math.min(3.0, 1.0 + s.streak * 0.15);
-      s.feedbackText = s.streak > 3 ? `Streak ${s.streak}!` : 'Catch!';
+      s.feedbackText = s.streak > 3 ? `${t(UI_STRINGS.streak)} ${s.streak}!` : t(GAME_STRINGS.catch);
       s.feedbackTimer = 0.5;
       spawnParticles(f.x, f.y, 10, 46, 234, 163);
       sounds.chime();
@@ -322,22 +384,22 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       drawToucan(ctx, w * 0.8, cy, 'left', elapsed * 2 + 1, '#e74c3c');
 
       // Neon title
-      juice.drawNeonText(ctx, 'Lancer de Fruits', cx, cy - 80, COLORS.mint, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['19']), cx, cy - 80, COLORS.mint, 28);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = COLORS.gold;
-      ctx.fillText('Toucans toss fruit as', cx, cy - 40);
-      ctx.fillText('a courtship ritual!', cx, cy - 16);
+      ctx.fillText(t(GAME_STRINGS.courtshipDesc1), cx, cy - 40);
+      ctx.fillText(t(GAME_STRINGS.courtshipDesc2), cx, cy - 16);
       ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText('Swipe to throw, tap to catch!', cx, cy + 80);
+      ctx.fillText(t(GAME_STRINGS.swipeInstruction), cx, cy + 80);
 
       // Pulsing neon "TAP TO START"
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.save();
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 130, COLORS.gold, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 130, COLORS.gold, 20);
       ctx.restore();
 
       ctx.restore();
@@ -417,7 +479,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
         f.active = false;
         s.streak = 0;
         s.speed = Math.max(1.0, s.speed - 0.2);
-        s.feedbackText = 'Miss!';
+        s.feedbackText = t(UI_STRINGS.miss);
         s.feedbackTimer = 0.6;
         s.missFlash = 0.3;
         s.canCatch = false;
@@ -540,7 +602,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       ctx.font = `bold 14px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = `rgba(46,234,163,${indicatorAlpha})`;
-      ctx.fillText('TAP!', w * 0.18, h * 0.42 + 50);
+      ctx.fillText(t(GAME_STRINGS.tap), w * 0.18, h * 0.42 + 50);
     }
 
     // Trail particles with additive blending
@@ -608,12 +670,12 @@ export default function GameLancerFruits({ onComplete, onBack }) {
 
     // Speed indicator - neon text
     if (s.speed > 1.1) {
-      juice.drawNeonText(ctx, `Speed x${s.speed.toFixed(1)}`, cx, 80, COLORS.gold, 18);
+      juice.drawNeonText(ctx, `${t(GAME_STRINGS.speed)} x${s.speed.toFixed(1)}`, cx, 80, COLORS.gold, 18);
     }
 
     // Streak - neon text
     if (s.streak > 1) {
-      juice.drawNeonText(ctx, `Streak: ${s.streak}`, cx, 110, COLORS.mint, 22);
+      juice.drawNeonText(ctx, `${t(UI_STRINGS.streak)}: ${s.streak}`, cx, 110, COLORS.mint, 22);
     }
 
     // Feedback
@@ -621,7 +683,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       const alpha = Math.min(1, s.feedbackTimer * 2);
       ctx.save();
       ctx.globalAlpha = alpha;
-      const feedbackColor = s.feedbackText === 'Miss!' ? COLORS.red : COLORS.mint;
+      const feedbackColor = s.feedbackText === t(UI_STRINGS.miss) ? COLORS.red : COLORS.mint;
       juice.drawNeonText(ctx, s.feedbackText, cx, cy - 60, feedbackColor, 30);
       ctx.restore();
     }
@@ -649,7 +711,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
     ctx.textAlign = 'left';
     ctx.shadowColor = COLORS.mint;
     ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 20, 40);
+    ctx.fillText(`${t(UI_STRINGS.score)}: ${s.score}`, 20, 40);
     ctx.restore();
 
     ctx.restore();

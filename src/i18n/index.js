@@ -230,6 +230,42 @@ export const UI_STRINGS = {
     fr: 'Chargement...', en: 'Loading...', es: 'Cargando...', de: 'Laden...', el: 'Φόρτωση...',
     zh: '加载中...', ja: '読み込み中...', hi: 'लोड हो रहा है...', pt: 'Carregando...', ru: 'Загрузка...',
   },
+  parrotsGiveTokens: {
+    fr: 'Les perroquets donnent 10/10 jetons', en: 'Parrots give 10/10 tokens', es: 'Los loros dan 10/10 fichas', de: 'Papageien geben 10/10 Token', el: 'Οι παπαγάλοι δίνουν 10/10 μάρκες',
+    zh: '鹦鹉给出10/10代币', ja: 'オウムは10/10トークンを与えます', hi: 'तोते 10/10 टोकन देते हैं', pt: 'Papagaios dão 10/10 fichas', ru: 'Попугаи дают 10/10 жетонов',
+  },
+  withoutHesitation: {
+    fr: 'sans hésitation !', en: 'without hesitation!', es: '¡sin dudar!', de: 'ohne zu zögern!', el: 'χωρίς δισταγμό!',
+    zh: '毫不犹豫！', ja: 'ためらいなく！', hi: 'बिना हिचकिचाहट!', pt: 'sem hesitação!', ru: 'без колебаний!',
+  },
+  swipeTokensToPartner: {
+    fr: 'Glissez les jetons → vers votre partenaire', en: 'Swipe tokens → to your partner', es: 'Desliza fichas → a tu compañero', de: 'Wische Token → zu deinem Partner', el: 'Σύρετε μάρκες → στον σύντροφό σας',
+    zh: '滑动代币 → 给你的伙伴', ja: 'トークンをスワイプ → パートナーへ', hi: 'टोकन स्वाइप करें → अपने साथी को', pt: 'Deslize fichas → para o seu parceiro', ru: 'Свайпните жетоны → партнёру',
+  },
+  fast: {
+    fr: 'RAPIDE !', en: 'FAST!', es: '¡RÁPIDO!', de: 'SCHNELL!', el: 'ΓΡΗΓΟΡΑ!',
+    zh: '快速！', ja: '速い！', hi: 'तेज़!', pt: 'RÁPIDO!', ru: 'БЫСТРО!',
+  },
+  ok: {
+    fr: 'OK', en: 'OK', es: 'OK', de: 'OK', el: 'ΟΚ',
+    zh: '还行', ja: 'OK', hi: 'ठीक', pt: 'OK', ru: 'ОК',
+  },
+  tooSlow: {
+    fr: 'Trop lent...', en: 'Too slow...', es: 'Muy lento...', de: 'Zu langsam...', el: 'Πολύ αργά...',
+    zh: '太慢了...', ja: '遅すぎ...', hi: 'बहुत धीमा...', pt: 'Muito lento...', ru: 'Слишком медленно...',
+  },
+  parrotsShareWithoutHesitation: {
+    fr: 'Les perroquets partagent sans hésitation !', en: 'Parrots share without hesitation!', es: '¡Los loros comparten sin dudar!', de: 'Papageien teilen ohne zu zögern!', el: 'Οι παπαγάλοι μοιράζονται χωρίς δισταγμό!',
+    zh: '鹦鹉毫不犹豫地分享！', ja: 'オウムはためらいなく分かち合います！', hi: 'तोते बिना हिचकिचाहट साझा करते हैं!', pt: 'Papagaios partilham sem hesitação!', ru: 'Попугаи делятся без колебаний!',
+  },
+  tokens: {
+    fr: 'jetons', en: 'tokens', es: 'fichas', de: 'Token', el: 'μάρκες',
+    zh: '代币', ja: 'トークン', hi: 'टोकन', pt: 'fichas', ru: 'жетонов',
+  },
+  pts: {
+    fr: 'pts', en: 'pts', es: 'pts', de: 'Pkt', el: 'πόν',
+    zh: '分', ja: 'pt', hi: 'अंक', pt: 'pts', ru: 'очк',
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -5,11 +5,73 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
+
+// Game-specific translation objects
+const STRINGS_EVEILLEUR = {
+  subtitle1: {
+    fr: "L'individu déclenche", en: 'The individual triggers', es: 'El individuo desencadena', de: 'Das Individuum löst aus',
+    el: 'Το άτομο πυροδοτεί', zh: '个体触发', ja: '個が引き起こす', hi: 'व्यक्ति प्रेरित करता है', pt: 'O indivíduo desencadeia', ru: 'Индивид запускает',
+  },
+  subtitle2: {
+    fr: 'le collectif !', en: 'the collective!', es: '¡lo colectivo!', de: 'das Kollektiv!',
+    el: 'το συλλογικό!', zh: '集体！', ja: '集団を！', hi: 'सामूहिक को!', pt: 'o coletivo!', ru: 'коллектив!',
+  },
+  phase1Hint: {
+    fr: 'Phase 1 : Gouttes du colibri solo', en: 'Phase 1: Solo hummingbird drops', es: 'Fase 1: Gotas del colibrí solo', de: 'Phase 1: Solo-Kolibri-Tropfen',
+    el: 'Φάση 1: Σταγόνες κολιμπρί σόλο', zh: '第1阶段：蜂鸟独自滴水', ja: 'フェーズ1：ハチドリソロドロップ', hi: 'चरण 1: अकेली हमिंगबर्ड की बूंदें', pt: 'Fase 1: Gotas do beija-flor solo', ru: 'Фаза 1: Капли одинокого колибри',
+  },
+  phase2Hint: {
+    fr: 'Phase 2 : Les oiseaux rejoignent, le multiplicateur grandit', en: 'Phase 2: Birds join, multiplier grows', es: 'Fase 2: Las aves se unen, el multiplicador crece', de: 'Phase 2: Vögel schließen sich an, Multiplikator wächst',
+    el: 'Φάση 2: Πουλιά ενώνονται, ο πολλαπλασιαστής αυξάνεται', zh: '第2阶段：鸟群加入，乘数增长', ja: 'フェーズ2：鳥が合流、倍率アップ', hi: 'चरण 2: पक्षी जुड़ते हैं, गुणक बढ़ता है', pt: 'Fase 2: Aves juntam-se, multiplicador cresce', ru: 'Фаза 2: Птицы присоединяются, множитель растёт',
+  },
+  phase3Hint: {
+    fr: 'Phase 3 : Cascade de pélicans !', en: 'Phase 3: Pelican frenzy cascade!', es: 'Fase 3: ¡Cascada de pelícanos!', de: 'Phase 3: Pelikan-Kaskade!',
+    el: 'Φάση 3: Καταρράκτης πελεκάνων!', zh: '第3阶段：鹈鹕狂潮级联！', ja: 'フェーズ3：ペリカンカスケード！', hi: 'चरण 3: पेलिकन कैस्केड!', pt: 'Fase 3: Cascata de pelicanos!', ru: 'Фаза 3: Каскад пеликанов!',
+  },
+  tapToSendDrops: {
+    fr: 'TAPEZ pour envoyer des gouttes !', en: 'TAP to send water drops!', es: '¡TOCA para enviar gotas!', de: 'TIPPE um Tropfen zu senden!',
+    el: 'ΠΑΤΗΣΤΕ για σταγόνες!', zh: '点击发送水滴！', ja: 'タップして水滴を送れ！', hi: 'बूंदें भेजने के लिए टैप करें!', pt: 'TOQUE para enviar gotas!', ru: 'НАЖМИТЕ, чтобы послать капли!',
+  },
+  solo: {
+    fr: 'SOLO', en: 'SOLO', es: 'SOLO', de: 'SOLO', el: 'ΣΟΛΟ',
+    zh: '独奏', ja: 'ソロ', hi: 'सोलो', pt: 'SOLO', ru: 'СОЛО',
+  },
+  formation: {
+    fr: 'FORMATION', en: 'FORMATION', es: 'FORMACIÓN', de: 'FORMATION', el: 'ΣΧΗΜΑΤΙΣΜΟΣ',
+    zh: '编队', ja: 'フォーメーション', hi: 'फॉर्मेशन', pt: 'FORMAÇÃO', ru: 'ФОРМАЦИЯ',
+  },
+  pelicanCascade: {
+    fr: 'CASCADE PÉLICAN', en: 'PELICAN CASCADE', es: 'CASCADA PELÍCANO', de: 'PELIKAN-KASKADE', el: 'ΚΑΤΑΡΡΑΚΤΗΣ ΠΕΛΕΚΑΝΩΝ',
+    zh: '鹈鹕级联', ja: 'ペリカンカスケード', hi: 'पेलिकन कैस्केड', pt: 'CASCATA PELICANO', ru: 'КАСКАД ПЕЛИКАНОВ',
+  },
+  drops: {
+    fr: 'Gouttes', en: 'Drops', es: 'Gotas', de: 'Tropfen', el: 'Σταγόνες',
+    zh: '水滴', ja: 'ドロップ', hi: 'बूंदें', pt: 'Gotas', ru: 'Капли',
+  },
+  collectiveAwakens: {
+    fr: 'Le Collectif S\'Éveille !', en: 'The Collective Awakens!', es: '¡El Colectivo Despierta!', de: 'Das Kollektiv Erwacht!', el: 'Το Συλλογικό Ξυπνά!',
+    zh: '集体觉醒！', ja: '集団が目覚める！', hi: 'सामूहिक जाग उठा!', pt: 'O Coletivo Desperta!', ru: 'Коллектив Пробуждается!',
+  },
+  totalDrops: {
+    fr: 'Total de gouttes', en: 'Total drops', es: 'Total de gotas', de: 'Tropfen gesamt', el: 'Σύνολο σταγόνων',
+    zh: '总水滴数', ja: '合計ドロップ', hi: 'कुल बूंदें', pt: 'Total de gotas', ru: 'Всего капель',
+  },
+  fireReduced: {
+    fr: 'Feu réduit à', en: 'Fire reduced to', es: 'Fuego reducido a', de: 'Feuer reduziert auf', el: 'Φωτιά μειώθηκε σε',
+    zh: '火焰减少到', ja: '火を抑制', hi: 'आग कम हुई', pt: 'Fogo reduzido a', ru: 'Огонь уменьшен до',
+  },
+  oneSparkIgnites: {
+    fr: 'Une étincelle enflamme le collectif !', en: 'One spark ignites the collective!', es: '¡Una chispa enciende lo colectivo!', de: 'Ein Funke entfacht das Kollektiv!', el: 'Ένας σπινθήρας ανάβει το συλλογικό!',
+    zh: '一个火花点燃集体！', ja: '一つの火花が集団に火をつける！', hi: 'एक चिंगारी सामूहिक को जगाती है!', pt: 'Uma faísca acende o coletivo!', ru: 'Одна искра зажигает коллектив!',
+  },
+};
 
 const GAME_DURATION = 30;
 const POOL_SIZE = 200;
 const PELICAN_COUNT = 7;
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 const BIRDS = [
   { name: 'Colibri', color: '#2EEAA3', darkColor: '#1CA04A', size: 10, joinTime: 0 },
@@ -28,6 +90,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     score: 0,
@@ -291,7 +354,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, "L'Eveilleur", w / 2, h / 2 - 80, COLORS.mint, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['26']), w / 2, h / 2 - 80, COLORS.mint, 28);
 
       // Glow behind title
       juice.drawGlow(ctx, w / 2, h / 2 - 80, 80, COLORS.mint, 0.15);
@@ -299,8 +362,8 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.font = `15px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = COLORS.mint;
-      ctx.fillText('The individual triggers', w / 2, h / 2 - 30);
-      ctx.fillText('the collective!', w / 2, h / 2 - 8);
+      ctx.fillText(t(STRINGS_EVEILLEUR.subtitle1), w / 2, h / 2 - 30);
+      ctx.fillText(t(STRINGS_EVEILLEUR.subtitle2), w / 2, h / 2 - 8);
       ctx.font = `13px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
       ctx.fillText('Phase 1: Solo hummingbird drops', w / 2, h / 2 + 30);
