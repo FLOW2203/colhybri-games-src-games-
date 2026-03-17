@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 30;
 const POOL_SIZE = 100;
@@ -19,7 +21,7 @@ const SEED_GRAVITY = 280;
 const SPOT_SPAWN_INTERVAL = 0.8;
 const WIND_CHANGE_INTERVAL = 3;
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameSuperDisperseur({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -29,6 +31,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -176,7 +179,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       const cy = h / 2;
 
       // Neon title
-      juice.drawNeonText(ctx, 'Super Disperseur', cx, cy - 60, COLORS.mint, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['22']), cx, cy - 60, COLORS.mint, 28);
 
       // Subtitle with glow
       ctx.font = `18px ${FONT_FAMILY}`;
@@ -195,7 +198,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
       // Pulsing "TAP TO START" with neon effect
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, COLORS.cyan, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 110, COLORS.cyan, 20);
       ctx.globalAlpha = 1;
 
       ctx.restore();
@@ -723,7 +726,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}80`,
           }}>
-            Time's Up!
+            {t(UI_STRINGS.timesUp)}
           </div>
           <div style={{
             color: COLORS.gold, fontSize: 20, marginBottom: 8,

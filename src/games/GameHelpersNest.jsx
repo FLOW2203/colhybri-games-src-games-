@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 45;
 const POOL_SIZE = 100;
@@ -15,7 +17,7 @@ const MAX_INSECTS = 8;
 const INSECT_SPAWN_INTERVAL = 1.2;
 const AI_CATCH_INTERVAL = 2.5;
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameHelpersNest({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -25,6 +27,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -207,7 +210,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Helpers at the Nest', cx, cy - 60, '#2EEAA3', 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['21']), cx, cy - 60, '#2EEAA3', 28);
 
       // Glow behind title
       juice.drawGlow(ctx, cx, cy - 60, 120, '#2EEAA3', 0.15);
@@ -228,7 +231,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
       // Pulsing "TAP TO START" with neon
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, '#00D4FF', 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 110, '#00D4FF', 20);
       ctx.globalAlpha = 1;
 
       // Glow pulse on start prompt
@@ -747,7 +750,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
               : `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`,
             fontFamily: FONT_FAMILY,
           }}>
-            {state.current.gameOver ? 'A chick starved!' : 'Time\'s Up!'}
+            {state.current.gameOver ? 'A chick starved!' : t(UI_STRINGS.timesUp)}
           </div>
           <div style={{
             color: COLORS.gold,
@@ -805,7 +808,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
             boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
             textShadow: 'none',
             letterSpacing: 0.5,
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             haptics.tapFeedback();
             onBack();
@@ -821,7 +824,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
             letterSpacing: 0.5,
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -835,7 +838,7 @@ export default function GameHelpersNest({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

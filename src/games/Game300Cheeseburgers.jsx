@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 15;
 const POOL_SIZE = 100;
@@ -16,7 +18,7 @@ const SPEED_INCREASE_INTERVAL = 5;
 const SPAWN_INTERVAL_BASE = 0.6;
 const MILESTONES = [BODY_WEIGHT * 100, BODY_WEIGHT * 200, BODY_WEIGHT * 300];
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 const FOOD_TYPES = [
   { type: 'insect', weight: 1, color: '#8B6914', size: 12, emoji: null },
@@ -32,6 +34,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     weight: 0,
@@ -197,7 +200,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, '300 Cheeseburgers', cx, h / 2 - 60, '#2EEAA3', 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['06']), cx, h / 2 - 60, '#2EEAA3', 28);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -219,7 +222,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
 
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, h / 2 + 130, '#FFFFFF', 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, h / 2 + 130, '#FFFFFF', 20);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -647,7 +650,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
           <div style={{
             color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
             textShadow: '0 0 20px rgba(255,255,255,0.5), 0 0 40px rgba(255,255,255,0.2)',
-          }}>Results</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: reachedGoal ? COLORS.gold : COLORS.mint, fontSize: 20, marginBottom: 8,
             textShadow: reachedGoal
@@ -680,7 +683,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
             boxShadow: '0 0 20px rgba(46,234,163,0.4), 0 0 40px rgba(46,234,163,0.15)',
             textShadow: '0 1px 2px rgba(0,0,0,0.3)',
             transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => { sounds.tick(); haptics.tapFeedback(); onBack(); }} style={{
             background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%)',
             color: COLORS.gray, border: `1px solid rgba(255,255,255,0.15)`,
@@ -690,7 +693,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
             WebkitBackdropFilter: 'blur(8px)',
             textShadow: '0 0 8px rgba(255,255,255,0.2)',
             transition: 'transform 0.15s ease, border-color 0.15s ease',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -701,7 +704,7 @@ export default function Game300Cheeseburgers({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );
