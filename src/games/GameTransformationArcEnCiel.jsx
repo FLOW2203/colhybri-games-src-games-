@@ -675,7 +675,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
             boxShadow: `0 0 20px ${COLORS.mint}60, 0 0 40px ${COLORS.mint}30`,
             textShadow: 'none',
             fontFamily: FONT_FAMILY,
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => { haptics.tapFeedback(); onBack(); }} style={{
             background: 'rgba(255,255,255,0.08)',
             color: COLORS.gray, border: `1px solid ${COLORS.gray}60`,
@@ -684,7 +684,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
             WebkitBackdropFilter: 'blur(4px)',
             textShadow: '0 0 6px rgba(255,255,255,0.2)',
             fontFamily: FONT_FAMILY,
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -695,7 +695,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
           fontFamily: FONT_FAMILY,
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );
