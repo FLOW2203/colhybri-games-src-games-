@@ -5,12 +5,14 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 45;
 const POOL_SIZE = 120;
 const NUM_PELICANS = 5;
 const NUM_FISH = 8;
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameSemiCercle({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -21,6 +23,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     score: 0,
@@ -308,7 +311,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Semi-Cercle', w / 2, h / 2 - 70, COLORS.cyan, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['15']), w / 2, h / 2 - 70, COLORS.cyan, 28);
 
       // Subtitle with glow
       ctx.font = `16px ${FONT_FAMILY}`;
@@ -327,7 +330,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
 
       // Pulsing start text with neon
       const pulse = 0.6 + 0.4 * Math.sin(elapsed * 3);
-      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.mint, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), w / 2, h / 2 + 120, COLORS.mint, 20);
       ctx.globalAlpha = pulse;
       juice.drawGlow(ctx, w / 2, h / 2 + 120, 80, COLORS.mint, 0.2);
       ctx.globalAlpha = 1;
@@ -627,7 +630,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
     ctx.shadowColor = COLORS.mint;
     ctx.shadowBlur = 12;
     ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 20, 40);
+    ctx.fillText(t(UI_STRINGS.score) + ': ' + s.score, 20, 40);
     ctx.shadowBlur = 0;
     ctx.restore();
 
@@ -650,7 +653,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
     juice.applyBloom(ctx, w, h, 0.08);
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, haptics, juice]));
+  }, [phase, sounds, spawnParticles, haptics, juice, t]));
 
   useEffect(() => { if (phase === 'ready') gameLoop.start(); }, [phase, gameLoop]);
 
@@ -682,7 +685,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
           <div style={{
             color: COLORS.white, fontSize: 30, fontWeight: 'bold', marginBottom: 8,
             textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}`,
-          }}>Fishing Over!</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.mint, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
             textShadow: `0 0 24px ${COLORS.mint}, 0 0 48px ${COLORS.mint}`,
@@ -711,7 +714,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.mint}80, 0 4px 15px rgba(0,0,0,0.3)`,
             textShadow: 'none',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             sounds.tick();
             haptics.tapFeedback();
@@ -725,7 +728,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
             WebkitBackdropFilter: 'blur(8px)',
             boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
             textShadow: '0 0 8px rgba(156,163,175,0.3)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -739,7 +742,7 @@ export default function GameSemiCercle({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

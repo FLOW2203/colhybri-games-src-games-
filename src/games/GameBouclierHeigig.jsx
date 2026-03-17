@@ -5,8 +5,10 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 const GAME_DURATION = 40;
 const POOL_SIZE = 120;
 const NUM_DEFENDERS = 5;
@@ -22,6 +24,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     score: 0,
@@ -229,7 +232,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Bouclier de Heigig', w / 2, h / 2 - 70, '#22C55E', 26);
+      juice.drawNeonText(ctx, t(GAME_NAMES['25']), w / 2, h / 2 - 70, '#22C55E', 26);
 
       // Glow behind title
       juice.drawGlow(ctx, w / 2, h / 2 - 70, 120, '#22C55E', 0.15);
@@ -246,7 +249,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
       // Pulsing "TAP TO START" with neon
       const pulse = 0.7 + 0.3 * Math.sin(elapsed * 3);
       ctx.globalAlpha = pulse;
-      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 110, '#FFFFFF', 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), w / 2, h / 2 + 110, '#FFFFFF', 20);
       ctx.globalAlpha = 1;
 
       ctx.restore();
@@ -515,14 +518,14 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
     juice.drawFlash(ctx, w, h);
 
     // Score with neon text
-    juice.drawNeonText(ctx, `Score: ${s.score}`, 80, 40, '#22C55E', 22);
+    juice.drawNeonText(ctx, t(UI_STRINGS.score) + ': ' + s.score, 80, 40, '#22C55E', 22);
 
     // Timer with neon text
     const timerColor = s.timeLeft < 5 ? '#FF4444' : '#FFFFFF';
     juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, timerColor, 24);
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnParticles]));
+  }, [phase, sounds, haptics, juice, spawnParticles, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -570,7 +573,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
               : '0 0 20px rgba(255,68,68,0.8), 0 0 40px rgba(255,68,68,0.4)',
             fontFamily: FONT_FAMILY,
           }}>
-            {isVictory ? 'Tree Defended!' : 'Tree Fell...'}
+            {isVictory ? t(UI_STRINGS.victory) : t(UI_STRINGS.defeat)}
           </div>
           <div style={{
             color: COLORS.mint,
@@ -605,7 +608,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
             boxShadow: '0 0 20px rgba(34,197,94,0.4), 0 4px 15px rgba(0,0,0,0.3)',
             textShadow: '0 1px 2px rgba(0,0,0,0.3)',
             fontFamily: FONT_FAMILY,
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             haptics.tapFeedback();
             onBack();
@@ -619,7 +622,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
             cursor: 'pointer',
             boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
             fontFamily: FONT_FAMILY,
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -631,7 +634,7 @@ export default function GameBouclierHeigig({ onComplete, onBack }) {
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10,
           fontFamily: FONT_FAMILY,
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

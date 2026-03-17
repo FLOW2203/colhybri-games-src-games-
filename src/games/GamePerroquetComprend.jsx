@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 30;
 const POOL_SIZE = 100;
@@ -18,7 +20,7 @@ const HINT_DURATION = 1.0;
 const CUP_WIDTH = 52;
 const CUP_HEIGHT = 60;
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GamePerroquetComprend({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -28,6 +30,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -218,7 +221,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Le Perroquet Comprend', cx, cy - 60, '#5BE0FF', 26);
+      juice.drawNeonText(ctx, t(GAME_NAMES['12']), cx, cy - 60, '#5BE0FF', 26);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -234,7 +237,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
 
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, '#FFFFFF', 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 110, '#FFFFFF', 20);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -435,19 +438,19 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
       let drawY = cp.y;
       if (isSwapping) {
         const [a, b] = s.shufflePairs[s.shuffleIndex];
-        const t = Math.min(1, s.shuffleT / (SHUFFLE_DURATION / Math.max(1, s.shufflePairs.length)));
-        const ease = 0.5 - 0.5 * Math.cos(t * Math.PI);
+        const tVal = Math.min(1, s.shuffleT / (SHUFFLE_DURATION / Math.max(1, s.shufflePairs.length)));
+        const ease = 0.5 - 0.5 * Math.cos(tVal * Math.PI);
         if (i === a) {
           const target = s.cupPositions[b];
           if (target) {
             drawX = cp.x + (target.x - cp.x) * ease;
-            drawY = cp.y - Math.sin(t * Math.PI) * 25;
+            drawY = cp.y - Math.sin(tVal * Math.PI) * 25;
           }
         } else if (i === b) {
           const target = s.cupPositions[a];
           if (target) {
             drawX = cp.x + (target.x - cp.x) * ease;
-            drawY = cp.y + Math.sin(t * Math.PI) * 25;
+            drawY = cp.y + Math.sin(tVal * Math.PI) * 25;
           }
         }
       }
@@ -605,7 +608,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
     }
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnParticles, getCupPositions, initRound]));
+  }, [phase, sounds, haptics, juice, spawnParticles, getCupPositions, initRound, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -653,7 +656,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
             color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
             textShadow: '0 0 20px rgba(91,224,255,0.6), 0 0 40px rgba(91,224,255,0.3)',
           }}>
-            Le Perroquet Comprend
+            {t(GAME_NAMES['12'])}
           </div>
           <div style={{
             color: COLORS.mint, fontSize: 18, marginBottom: 8,
@@ -673,7 +676,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
           }}>
             {displayScore}
           </div>
-          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>points</div>
+          <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>{t(UI_STRINGS.points)}</div>
           <button onClick={() => {
             haptics.tapFeedback();
             sounds.pop();
@@ -686,7 +689,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: '0 0 20px rgba(91,224,255,0.4), 0 4px 15px rgba(0,0,0,0.3)',
             textShadow: '0 1px 2px rgba(0,0,0,0.2)',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             haptics.tapFeedback();
             sounds.pop();
@@ -696,7 +699,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
             fontFamily: FONT_FAMILY,
             boxShadow: '0 0 10px rgba(255,255,255,0.05)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -711,7 +714,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

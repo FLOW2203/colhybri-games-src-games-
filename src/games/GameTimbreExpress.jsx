@@ -653,7 +653,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
     juice.applyBloom(ctx, w, h, 0.06);
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnParticles, spawnParcel]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnParcel, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -776,7 +776,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
               textShadow: 'none',
               transition: 'transform 0.1s, box-shadow 0.1s',
             }}
-          >Continue</button>
+          >{t(UI_STRINGS.continueBtn)}</button>
           <button
             onClick={() => {
               sounds.tick();
@@ -797,7 +797,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
               boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
               transition: 'transform 0.1s, box-shadow 0.1s',
             }}
-          >Back</button>
+          >{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -814,7 +814,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
           }}
-        >Back</button>
+        >{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

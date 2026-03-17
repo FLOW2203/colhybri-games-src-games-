@@ -5,8 +5,10 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 const GAME_DURATION = 45;
 const POOL_SIZE = 100;
 const PARROT_COLORS = [
@@ -30,6 +32,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -131,10 +134,10 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
     const s = state.current;
     // Check if touching a token
     for (let i = 0; i < s.tokens.length; i++) {
-      const t = s.tokens[i];
-      const dx = x - t.x;
-      const dy = y - t.y;
-      if (dx * dx + dy * dy < (t.radius + 20) * (t.radius + 20)) {
+      const tk = s.tokens[i];
+      const dx = x - tk.x;
+      const dy = y - tk.y;
+      if (dx * dx + dy * dy < (tk.radius + 20) * (tk.radius + 20)) {
         s.dragging = { tokenIndex: i, x, y };
         sounds.tick();
         haptics.tapFeedback();
@@ -241,7 +244,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Zéro Jalousie', cx, cy - 60, COLORS.mint, 32);
+      juice.drawNeonText(ctx, t(GAME_NAMES['11']), cx, cy - 60, COLORS.mint, 32);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -259,7 +262,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
       // Pulsing neon TAP TO START
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, COLORS.cyan, 22);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 110, COLORS.cyan, 22);
       ctx.globalAlpha = 1;
 
       ctx.restore();
@@ -316,14 +319,14 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
 
     // Dragged token follows pointer
     if (s.dragging !== null && s.dragging.tokenIndex < s.tokens.length) {
-      const t = s.tokens[s.dragging.tokenIndex];
-      t.x = s.dragging.x;
-      t.y = s.dragging.y;
+      const tk = s.tokens[s.dragging.tokenIndex];
+      tk.x = s.dragging.x;
+      tk.y = s.dragging.y;
     }
 
     // Token sparkle animation
-    for (const t of s.tokens) {
-      t.sparkle += delta * 4;
+    for (const tk of s.tokens) {
+      tk.sparkle += delta * 4;
     }
 
     // Update particles
@@ -516,26 +519,26 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
 
     // Draw tokens with glow and additive blending
     for (let i = 0; i < s.tokens.length; i++) {
-      const t = s.tokens[i];
+      const tk = s.tokens[i];
       const isDragged = s.dragging !== null && s.dragging.tokenIndex === i;
 
       ctx.save();
-      ctx.translate(t.x, t.y);
+      ctx.translate(tk.x, tk.y);
       if (isDragged) ctx.scale(1.2, 1.2);
 
       // Token outer glow (additive)
-      juice.drawGlow(ctx, 0, 0, t.radius + 16, '#FFD700', 0.2 + Math.sin(t.sparkle) * 0.1);
+      juice.drawGlow(ctx, 0, 0, tk.radius + 16, '#FFD700', 0.2 + Math.sin(tk.sparkle) * 0.1);
 
       // Token glow
       ctx.beginPath();
-      ctx.arc(0, 0, t.radius + 4, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(245,166,35,${0.15 + Math.sin(t.sparkle) * 0.1})`;
+      ctx.arc(0, 0, tk.radius + 4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(245,166,35,${0.15 + Math.sin(tk.sparkle) * 0.1})`;
       ctx.fill();
 
       // Token body
       ctx.beginPath();
-      ctx.arc(0, 0, t.radius, 0, Math.PI * 2);
-      const tGrad = ctx.createRadialGradient(-3, -3, 2, 0, 0, t.radius);
+      ctx.arc(0, 0, tk.radius, 0, Math.PI * 2);
+      const tGrad = ctx.createRadialGradient(-3, -3, 2, 0, 0, tk.radius);
       tGrad.addColorStop(0, '#FFD700');
       tGrad.addColorStop(1, '#B8860B');
       ctx.fillStyle = tGrad;
@@ -556,7 +559,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = 0.3;
         ctx.beginPath();
-        ctx.arc(0, 0, t.radius + 8, 0, Math.PI * 2);
+        ctx.arc(0, 0, tk.radius + 8, 0, Math.PI * 2);
         ctx.fillStyle = '#FFD700';
         ctx.fill();
         ctx.restore();
@@ -607,7 +610,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
     juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 40, s.timeLeft < 5 ? COLORS.red : COLORS.white, 24);
 
     // Score display (neon)
-    juice.drawNeonText(ctx, `Score: ${s.score}`, cx, h * 0.5, COLORS.gold, 22);
+    juice.drawNeonText(ctx, t(UI_STRINGS.score) + ': ' + s.score, cx, h * 0.5, COLORS.gold, 22);
 
     // Instruction hint
     ctx.font = `13px ${FONT_FAMILY}`;
@@ -628,7 +631,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
     juice.applyBloom(ctx, w, h, 0.08);
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnParticles, spawnToken, getParrotPositions]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnToken, getParrotPositions, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -681,7 +684,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
             color: COLORS.white, fontSize: 32, fontWeight: 'bold', marginBottom: 16,
             textShadow: `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`,
           }}>
-            Zéro Jalousie
+            {t(GAME_NAMES['11'])}
           </div>
           <div style={{
             color: allAbove70End ? COLORS.green : COLORS.gold,
@@ -711,7 +714,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
           <div style={{
             color: COLORS.gray, fontSize: 14, marginBottom: 28,
             textShadow: `0 0 6px ${COLORS.gray}40`,
-          }}>points</div>
+          }}>{t(UI_STRINGS.points)}</div>
           <button
             onClick={() => {
               sounds.chime();
@@ -732,7 +735,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
               boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 12px rgba(0,0,0,0.3)`,
               textShadow: 'none',
             }}
-          >Continue</button>
+          >{t(UI_STRINGS.continueBtn)}</button>
           <button
             onClick={() => {
               sounds.tick();
@@ -753,7 +756,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
               boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
               textShadow: `0 0 6px ${COLORS.gray}40`,
             }}
-          >Back</button>
+          >{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -771,7 +774,7 @@ export default function GameZeroJalousie({ onComplete, onBack }) {
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
           }}
-        >Back</button>
+        >{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

@@ -5,8 +5,10 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 const GAME_DURATION = 45;
 const POOL_SIZE = 100;
 const TEMP_MIN = 32;
@@ -24,6 +26,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION, temperature: 38, score: 0, safeTime: 0,
@@ -210,7 +213,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
       ctx.fillStyle = sg; ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Radiateur Naturel', cx, h * 0.25, '#22c55e', 26);
+      juice.drawNeonText(ctx, t(GAME_NAMES['23']), cx, h * 0.25, '#22c55e', 26);
 
       // Glow behind toucan on ready screen
       juice.drawGlow(ctx, cx, h * 0.15, 80, '#ff6b35', 0.2);
@@ -227,7 +230,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
       // Pulsing neon "TAP TO START"
       const pulse = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = pulse;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.68, '#00e5ff', 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, h * 0.68, '#00e5ff', 20);
       ctx.globalAlpha = 1;
 
       drawToucan(ctx, cx, h * 0.15, 38, elapsed * 2, 0, 0);
@@ -476,7 +479,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 36, 36, timerColor, 22);
 
     // Neon score
-    juice.drawNeonText(ctx, `Score: ${s.score}`, 90, 36, '#ffffff', 18);
+    juice.drawNeonText(ctx, t(UI_STRINGS.score) + ': ' + s.score, 90, 36, '#ffffff', 18);
 
     ctx.font = `14px ${FONT_FAMILY}`; ctx.textAlign = 'left'; ctx.fillStyle = COLORS.green;
     ctx.fillText(`Safe: ${s.safeTime.toFixed(1)}s`, 60, 56);
@@ -485,7 +488,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
     juice.drawFlash(ctx, w, h);
 
     ctx.restore();
-  }, [phase, nextWeather, drawToucan, drawGauge, spawnParticles, juice, sounds, haptics]));
+  }, [phase, nextWeather, drawToucan, drawGauge, spawnParticles, juice, sounds, haptics, t]));
 
   useEffect(() => { if (phase === 'ready') gameLoop.start(); }, [phase, gameLoop]);
 
@@ -534,7 +537,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
               ? '0 0 20px rgba(34,197,94,0.6), 0 0 40px rgba(34,197,94,0.3)'
               : '0 0 20px rgba(239,68,68,0.6), 0 0 40px rgba(239,68,68,0.3)',
           }}>
-            Time's Up!
+            {t(UI_STRINGS.timesUp)}
           </div>
           <div style={{
             color: COLORS.green,
@@ -556,7 +559,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
             fontSize: 14,
             marginBottom: 24,
             textShadow: '0 0 8px rgba(255,255,255,0.2)',
-          }}>points</div>
+          }}>{t(UI_STRINGS.points)}</div>
           <button onClick={() => {
             sounds.success();
             haptics.tapFeedback();
@@ -574,7 +577,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: '0 0 20px rgba(0,229,255,0.4), 0 4px 15px rgba(0,0,0,0.3)',
             textShadow: '0 1px 2px rgba(0,0,0,0.2)',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             sounds.tick();
             haptics.tapFeedback();
@@ -590,7 +593,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: '0 0 10px rgba(255,255,255,0.05)',
             textShadow: '0 0 8px rgba(255,255,255,0.15)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -603,7 +606,7 @@ export default function GameRadiateurNaturel({ onComplete, onBack }) {
           color: COLORS.white, border: 'none', borderRadius: 8, padding: '8px 16px',
           fontSize: 14, cursor: 'pointer', zIndex: 10, fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );
