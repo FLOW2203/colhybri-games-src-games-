@@ -5,8 +5,10 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 const GAME_DURATION = 45;
 const POOL_SIZE = 100;
 const DIRECTIONS = ['up', 'down', 'left', 'right'];
@@ -24,6 +26,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -273,7 +276,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
       ctx.fillRect(0, h * 0.75, w, h * 0.25);
 
       // Title with neon text
-      juice.drawNeonText(ctx, '\u00C9cole des P\u00E9licans', cx, h * 0.3, COLORS.cyan, 26);
+      juice.drawNeonText(ctx, t(GAME_NAMES['18']), cx, h * 0.3, COLORS.cyan, 26);
 
       // Glow behind title
       juice.drawGlow(ctx, cx, h * 0.3, 120, COLORS.cyan, 0.15);
@@ -291,7 +294,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
       // Pulsing TAP TO START with neon
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.65, COLORS.mint, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, h * 0.65, COLORS.mint, 20);
       ctx.globalAlpha = 1;
 
       // Glow under pelicans
@@ -542,7 +545,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
     juice.drawNeonText(ctx, `${Math.ceil(s.timeLeft)}s`, w - 40, 36, s.timeLeft < 5 ? COLORS.red : COLORS.white, 22);
 
     // Score with neon
-    juice.drawNeonText(ctx, `Score: ${s.score}`, 90, 36, COLORS.white, 18);
+    juice.drawNeonText(ctx, t(UI_STRINGS.score) + ': ' + s.score, 90, 36, COLORS.white, 18);
 
     // Lives
     ctx.font = `16px ${FONT_FAMILY}`;
@@ -568,7 +571,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
     juice.drawGlow(ctx, w - 35, 55, 20, COLORS.gold, 0.1);
 
     ctx.restore();
-  }, [phase, drawPelican, drawArrow, juice, haptics, sounds]));
+  }, [phase, drawPelican, drawArrow, juice, haptics, sounds, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -615,7 +618,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
             color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
             textShadow: `0 0 20px ${state.current.lives <= 0 ? COLORS.red : COLORS.cyan}, 0 0 40px ${state.current.lives <= 0 ? COLORS.red : COLORS.cyan}50`,
           }}>
-            {state.current.lives <= 0 ? 'No Lives Left!' : 'Time\'s Up!'}
+            {state.current.lives <= 0 ? t(UI_STRINGS.gameOver) : t(UI_STRINGS.timesUp)}
           </div>
           <div style={{
             color: COLORS.gold, fontSize: 20, marginBottom: 8,
@@ -638,7 +641,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
           <div style={{
             color: COLORS.gray, fontSize: 14, marginBottom: 24,
             textShadow: `0 0 8px ${COLORS.gray}60`,
-          }}>points</div>
+          }}>{t(UI_STRINGS.points)}</div>
           <button onClick={() => {
             haptics.tapFeedback();
             sounds.chime();
@@ -652,7 +655,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
             textShadow: 'none',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             haptics.tapFeedback();
             onBack();
@@ -667,7 +670,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
             WebkitBackdropFilter: 'blur(8px)',
             boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
             textShadow: `0 0 8px ${COLORS.gray}40`,
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -681,7 +684,7 @@ export default function GameEcolePelicans({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

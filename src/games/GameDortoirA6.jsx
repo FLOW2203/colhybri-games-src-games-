@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 45;
 const TARGET_TEMP = 38;
@@ -12,7 +14,7 @@ const NUM_TOUCANS = 6;
 const POOL_SIZE = 100;
 const WIND_INTERVAL = 10;
 const TOUCAN_COLORS = ['#FF6B35', '#F7C948', '#2EC4B6', '#E71D36', '#7209B7', '#3A86FF'];
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 function drawToucan(ctx, x, y, rx, ry, bodyColor, beakColor, alpha) {
   ctx.save();
@@ -75,6 +77,7 @@ export default function GameDortoirA6({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const makeToucans = useCallback(() => Array(NUM_TOUCANS).fill(null).map((_, i) => {
     const order = NUM_TOUCANS - i;
@@ -160,12 +163,12 @@ export default function GameDortoirA6({ onComplete, onBack }) {
     }));
 
     for (let i = 0; i < NUM_TOUCANS; i++) {
-      const t = s.toucans[i];
-      if (!t.placed) {
-        t.homeX = positions[i].x;
-        t.homeY = positions[i].y;
-        t.x = t.homeX;
-        t.y = t.homeY;
+      const tc = s.toucans[i];
+      if (!tc.placed) {
+        tc.homeX = positions[i].x;
+        tc.homeY = positions[i].y;
+        tc.x = tc.homeX;
+        tc.y = tc.homeY;
       }
     }
     s.layoutDone = true;

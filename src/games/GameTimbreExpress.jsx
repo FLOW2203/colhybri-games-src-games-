@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 30;
 const POOL_SIZE = 100;
@@ -18,7 +20,7 @@ const COMBO_THRESHOLD = 5;
 const PARCEL_WIDTH_RATIO = 0.16;
 const PARCEL_HEIGHT_RATIO = 0.08;
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 const PARCEL_COLORS = [
   [180, 140, 100], [200, 160, 110], [160, 120, 90],
@@ -33,6 +35,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -241,7 +244,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Timbre Express', cx, h * 0.3, COLORS.cyan, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['08']), cx, h * 0.3, COLORS.cyan, 28);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -261,7 +264,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       // Pulsing "TAP TO START" with neon
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.72, COLORS.mint, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, h * 0.72, COLORS.mint, 20);
       ctx.globalAlpha = 1;
 
       // Glow behind title
@@ -602,7 +605,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
     ctx.restore();
 
     // Score with neon glow
-    juice.drawNeonText(ctx, `Score: ${s.score}`, 80, 40, COLORS.white, 20);
+    juice.drawNeonText(ctx, t(UI_STRINGS.score) + ': ' + s.score, 80, 40, COLORS.white, 20);
 
     // Lives
     ctx.font = `18px ${FONT_FAMILY}`;
@@ -708,7 +711,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
             marginBottom: 16,
             textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}80`,
             fontFamily: FONT_FAMILY,
-          }}>Results</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.mint,
             fontSize: 20,
@@ -751,7 +754,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
             fontSize: 14,
             marginBottom: 24,
             fontFamily: FONT_FAMILY,
-          }}>points</div>
+          }}>{t(UI_STRINGS.points)}</div>
           <button
             onClick={() => {
               sounds.pop();
