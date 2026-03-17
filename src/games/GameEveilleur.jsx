@@ -366,14 +366,14 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.fillText(t(STRINGS_EVEILLEUR.subtitle2), w / 2, h / 2 - 8);
       ctx.font = `13px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText('Phase 1: Solo hummingbird drops', w / 2, h / 2 + 30);
-      ctx.fillText('Phase 2: Birds join, multiplier grows', w / 2, h / 2 + 50);
-      ctx.fillText('Phase 3: Pelican frenzy cascade!', w / 2, h / 2 + 70);
+      ctx.fillText(t(STRINGS_EVEILLEUR.phase1Hint), w / 2, h / 2 + 30);
+      ctx.fillText(t(STRINGS_EVEILLEUR.phase2Hint), w / 2, h / 2 + 50);
+      ctx.fillText(t(STRINGS_EVEILLEUR.phase3Hint), w / 2, h / 2 + 70);
 
       // Pulsing TAP TO START with neon
       const pulse = 0.7 + Math.sin(elapsed * 3) * 0.3;
       ctx.globalAlpha = pulse;
-      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.white, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart).toUpperCase(), w / 2, h / 2 + 120, COLORS.white, 20);
       ctx.globalAlpha = 1;
 
       ctx.restore();
@@ -701,19 +701,19 @@ export default function GameEveilleur({ onComplete, onBack }) {
     const phaseNum = s.gamePhase;
     let phaseLabel, phaseCol;
     if (phaseNum === 1) {
-      phaseLabel = 'SOLO';
+      phaseLabel = t(STRINGS_EVEILLEUR.solo);
       phaseCol = COLORS.mint;
     } else if (phaseNum === 2) {
-      phaseLabel = `FORMATION x${s.activeBirds}`;
+      phaseLabel = `${t(STRINGS_EVEILLEUR.formation)} x${s.activeBirds}`;
       phaseCol = COLORS.cyan;
     } else {
-      phaseLabel = `PELICAN CASCADE x${PELICAN_COUNT * 3 + s.activeBirds}`;
+      phaseLabel = `${t(STRINGS_EVEILLEUR.pelicanCascade)} x${PELICAN_COUNT * 3 + s.activeBirds}`;
       phaseCol = COLORS.gold;
     }
     juice.drawNeonText(ctx, phaseLabel, cx, 72, phaseCol, 14);
 
     // Total drops with neon
-    juice.drawNeonText(ctx, `Drops: ${s.totalDrops}`, cx, 90, COLORS.water, 13);
+    juice.drawNeonText(ctx, `${t(STRINGS_EVEILLEUR.drops)}: ${s.totalDrops}`, cx, 90, COLORS.water, 13);
 
     // Score with neon glow
     juice.drawGlow(ctx, cx, 36, 30, COLORS.white, 0.1);
@@ -766,11 +766,11 @@ export default function GameEveilleur({ onComplete, onBack }) {
       ctx.font = `14px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText('TAP to send water drops!', cx, h * 0.65);
+      ctx.fillText(t(STRINGS_EVEILLEUR.tapToSendDrops), cx, h * 0.65);
     }
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnDrop, spawnParticles]));
+  }, [phase, sounds, haptics, juice, spawnDrop, spawnParticles, t]));
 
   useEffect(() => { if (phase === 'ready') gameLoop.start(); }, [phase, gameLoop]);
 
@@ -809,7 +809,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
           <div style={{
             color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 8,
             textShadow: `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`,
-          }}>The Collective Awakens!</div>
+          }}>{t(STRINGS_EVEILLEUR.collectiveAwakens)}</div>
           <div style={{
             color: COLORS.cyan, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
             textShadow: `0 0 30px ${COLORS.cyan}, 0 0 60px ${COLORS.cyan}80`,
@@ -818,7 +818,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
             color: COLORS.gray, fontSize: 15, marginBottom: 4,
             textShadow: '0 0 8px rgba(255,255,255,0.3)',
           }}>
-            Total drops: {state.current.totalDrops}
+            {t(STRINGS_EVEILLEUR.totalDrops)}: {state.current.totalDrops}
           </div>
           <div style={{
             color: COLORS.gray, fontSize: 15, marginBottom: 4,

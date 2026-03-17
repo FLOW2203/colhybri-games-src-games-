@@ -606,7 +606,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
           }}>{displayScore}</div>
           <div style={{ color: '#667', fontSize: 14, marginBottom: 4 }}>{t(UI_STRINGS.bestStreak)}: {state.current.bestStreak}</div>
           <div style={{ color: '#556', fontSize: 13, marginBottom: 32 }}>
-            A hummingbird heart: 1,260 BPM!
+            {t(UI_STRINGS.heartbeatFact)}
           </div>
           <button
             onClick={() => onComplete(state.current.score)}
@@ -615,14 +615,14 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
               padding: '14px 48px', borderRadius: 14, fontSize: 18, fontWeight: 'bold', cursor: 'pointer',
               marginBottom: 12, boxShadow: '0 0 20px rgba(46,234,163,0.3)',
             }}
-          >Continue</button>
+          >{t(UI_STRINGS.continueBtn)}</button>
           <button
             onClick={onBack}
             style={{
               background: 'transparent', color: '#667', border: '1px solid #334',
               padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
             }}
-          >Back</button>
+          >{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -633,7 +633,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
             color: '#AAB', border: 'none', borderRadius: 10, padding: '8px 16px',
             fontSize: 13, cursor: 'pointer', zIndex: 10, backdropFilter: 'blur(4px)',
           }}
-        >← Back</button>
+        >← {t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

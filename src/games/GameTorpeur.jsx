@@ -195,7 +195,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
       juice.drawGlow(ctx, cx, readyBirdY, 60, '#F5A623', 0.3);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Torpeur', cx, cy + 50, COLORS.gold, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['02']), cx, cy + 50, COLORS.gold, 28);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -208,13 +208,13 @@ export default function GameTorpeur({ onComplete, onBack }) {
 
       ctx.font = `16px ${FONT_FAMILY}`;
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText('HOLD to rest, RELEASE to fly', cx, cy + 145);
-      ctx.fillText("Don't run out of energy!", cx, cy + 168);
+      ctx.fillText(t(UI_STRINGS.holdToRest) + ', ' + t(UI_STRINGS.releaseToFly), cx, cy + 145);
+      ctx.fillText(t(UI_STRINGS.dontRunOutOfEnergy), cx, cy + 168);
 
       // Neon pulsing "TAP TO START"
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 210, COLORS.mint, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 210, COLORS.mint, 20);
       ctx.globalAlpha = 1;
 
       // Bloom on ready screen
@@ -424,10 +424,10 @@ export default function GameTorpeur({ onComplete, onBack }) {
     }
 
     // Vignette in torpor
-    if (t > 0.3) {
+    if (bt > 0.3) {
       const vigGrad = ctx.createRadialGradient(cx, cy, h * 0.2, cx, cy, h * 0.7);
       vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
-      vigGrad.addColorStop(1, `rgba(0,10,30,${(t - 0.3) * 0.6})`);
+      vigGrad.addColorStop(1, `rgba(0,10,30,${(bt - 0.3) * 0.6})`);
       ctx.fillStyle = vigGrad;
       ctx.fillRect(0, 0, w, h);
     }
@@ -457,7 +457,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
         ctx.rotate(-0.5 + i * 0.2);
         ctx.beginPath();
         ctx.ellipse(0, -8, 4, 8, 0, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(34,100,34,${0.3 + t * 0.3})`;
+        ctx.fillStyle = `rgba(34,100,34,${0.3 + bt * 0.3})`;
         ctx.fill();
         ctx.restore();
       }
@@ -617,7 +617,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
     ctx.fillStyle = COLORS.white;
     ctx.shadowColor = s.energy < 20 ? COLORS.red : COLORS.white;
     ctx.shadowBlur = s.energy < 20 ? 10 : 4;
-    ctx.fillText(`Energy: ${Math.round(s.energy)}%`, cx, barY - 6);
+    ctx.fillText(t(UI_STRINGS.energy) + ': ' + Math.round(s.energy) + '%', cx, barY - 6);
     ctx.shadowBlur = 0;
 
     // Temperature with neon glow
@@ -625,11 +625,11 @@ export default function GameTorpeur({ onComplete, onBack }) {
 
     // State indicator - neon text
     if (s.isFlying) {
-      juice.drawNeonText(ctx, 'FLYING', cx, 80, COLORS.gold, 18);
+      juice.drawNeonText(ctx, t(UI_STRINGS.flying), cx, 80, COLORS.gold, 18);
     } else {
       juice.drawNeonText(ctx, 'TORPOR', cx, 80, COLORS.cyan, 18);
       // Frost overlay on edges
-      ctx.fillStyle = `rgba(150,200,255,${t * 0.08})`;
+      ctx.fillStyle = `rgba(150,200,255,${bt * 0.08})`;
       ctx.fillRect(0, 0, 30, h);
       ctx.fillRect(w - 30, 0, 30, h);
       ctx.fillRect(0, 0, w, 20);
@@ -666,7 +666,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
     juice.drawFlash(ctx, w, h);
 
     // Bloom effect - subtle during flight, more during torpor
-    const bloomIntensity = s.isFlying ? 0.06 : 0.1 * t;
+    const bloomIntensity = s.isFlying ? 0.06 : 0.1 * bt;
     juice.applyBloom(ctx, w, h, bloomIntensity);
 
     // Update juice state

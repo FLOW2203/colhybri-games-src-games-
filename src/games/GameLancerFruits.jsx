@@ -243,7 +243,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
       sounds.whoosh();
       haptics.tapFeedback();
     }
-  }, [phase, sounds, haptics, juice, spawnParticles, setupFruit]);
+  }, [phase, sounds, haptics, juice, spawnParticles, setupFruit, t]);
 
   const handleSwipe = useCallback((direction) => {
     if (phase !== 'playing') return;
@@ -756,18 +756,18 @@ export default function GameLancerFruits({ onComplete, onBack }) {
           <div style={{
             color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 12,
             textShadow: `0 0 20px ${COLORS.gold}, 0 0 40px ${COLORS.gold}`,
-          }}>Time's Up!</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.green, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
             textShadow: `0 0 20px ${COLORS.green}, 0 0 40px ${COLORS.green}80`,
           }}>{displayScore}</div>
-          <div style={{ color: COLORS.gray, fontSize: 16, marginBottom: 4 }}>exchanges completed</div>
+          <div style={{ color: COLORS.gray, fontSize: 16, marginBottom: 4 }}>{t(GAME_STRINGS.exchangesCompleted)}</div>
           <div style={{
             color: COLORS.gold, fontSize: 14, marginBottom: 4,
             textShadow: `0 0 10px ${COLORS.gold}80`,
-          }}>Best Streak: {state.current.bestStreak}</div>
+          }}>{t(UI_STRINGS.bestStreak)}: {state.current.bestStreak}</div>
           <div style={{ color: COLORS.gray, fontSize: 14, marginBottom: 24 }}>
-            Toucans toss fruit to show love!
+            {t(GAME_STRINGS.tossLoveFact)}
           </div>
           <button onClick={() => {
             sounds.pop();
@@ -781,7 +781,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             textShadow: '0 1px 2px rgba(0,0,0,0.2)',
             boxShadow: `0 0 20px ${COLORS.green}60, 0 4px 15px rgba(0,0,0,0.3)`,
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             sounds.pop();
             haptics.tapFeedback();
@@ -794,7 +794,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -809,7 +809,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

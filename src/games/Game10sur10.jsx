@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 15;
 const TOTAL_TOKENS = 10;
@@ -18,6 +20,7 @@ export default function Game10sur10({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -334,21 +337,21 @@ export default function Game10sur10({ onComplete, onBack }) {
       ctx.fill();
       ctx.globalAlpha = 1;
 
-      juice.drawNeonText(ctx, '10 sur 10', cx, cy - 90, '#F5A623', 32);
+      juice.drawNeonText(ctx, t(GAME_NAMES['13']), cx, cy - 90, '#F5A623', 32);
 
-      ctx.font = '15px -apple-system, sans-serif';
+      ctx.font = "15px 'Outfit', 'DM Sans', sans-serif";
       ctx.textAlign = 'center';
       ctx.fillStyle = '#8a8';
-      ctx.fillText('Parrots give 10/10 tokens', cx, cy - 50);
-      ctx.fillText('without hesitation!', cx, cy - 30);
+      ctx.fillText(t(UI_STRINGS.parrotsGiveTokens), cx, cy - 50);
+      ctx.fillText(t(UI_STRINGS.withoutHesitation), cx, cy - 30);
 
       ctx.fillStyle = '#667';
-      ctx.font = '13px -apple-system, sans-serif';
-      ctx.fillText('Swipe tokens → to your partner', cx, cy + 85);
+      ctx.font = "13px 'Outfit', 'DM Sans', sans-serif";
+      ctx.fillText(t(UI_STRINGS.swipeTokensToPartner), cx, cy + 85);
 
       const tapAlpha = 0.3 + Math.sin(elapsed * 4) * 0.7;
       ctx.globalAlpha = Math.max(0, tapAlpha);
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 130, '#F5A623', 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart).toUpperCase(), cx, cy + 130, '#F5A623', 20);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -387,7 +390,7 @@ export default function Game10sur10({ onComplete, onBack }) {
         s.score += tokenScore;
 
         if (hesitation < 0.5) {
-          s.feedbackText = `FAST! ×${s.multiplier.toFixed(1)}`;
+          s.feedbackText = `${t(UI_STRINGS.fast)} ×${s.multiplier.toFixed(1)}`;
           spawnParticles(t.endX, t.endY, 18, 46, 234, 163, { maxSpeed: 300, upBias: 40 });
           s.shockwaves.push({ x: t.endX, y: t.endY, radius: 15, maxRadius: 120, life: 0.4, maxLife: 0.4, color: 'rgba(46,234,163,0.5)' });
           juice.shake(5, 0.12);
@@ -395,12 +398,12 @@ export default function Game10sur10({ onComplete, onBack }) {
           haptics.comboFeedback(s.consecutiveSpeed);
           sounds.combo(s.consecutiveSpeed);
         } else if (hesitation < 1.0) {
-          s.feedbackText = `OK ×${s.multiplier.toFixed(1)}`;
+          s.feedbackText = `${t(UI_STRINGS.ok)} ×${s.multiplier.toFixed(1)}`;
           spawnParticles(t.endX, t.endY, 10, 245, 166, 35);
           haptics.tapFeedback();
           sounds.pop();
         } else {
-          s.feedbackText = 'Too slow...';
+          s.feedbackText = t(UI_STRINGS.tooSlow);
           haptics.failFeedback();
         }
         s.feedbackTimer = 0.8;
@@ -562,7 +565,7 @@ export default function Game10sur10({ onComplete, onBack }) {
 
       // Number
       ctx.rotate(-s.tokenAngle);
-      ctx.font = 'bold 13px -apple-system, sans-serif';
+      ctx.font = "bold 13px 'Outfit', 'DM Sans', sans-serif";
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = '#6B4000';
       ctx.fillText(`${s.tokensGiven + 1}`, 0, 1);
@@ -605,7 +608,7 @@ export default function Game10sur10({ onComplete, onBack }) {
     if (s.feedbackTimer > 0) {
       const alpha = Math.min(1, s.feedbackTimer * 2);
       ctx.globalAlpha = alpha;
-      const fbColor = s.feedbackText.includes('slow') ? '#FF4444' : '#2EEAA3';
+      const fbColor = s.feedbackText === t(UI_STRINGS.tooSlow) ? '#FF4444' : '#2EEAA3';
       juice.drawNeonText(ctx, s.feedbackText, cx, cy - 90, fbColor, 26);
       ctx.globalAlpha = 1;
     }
@@ -649,7 +652,7 @@ export default function Game10sur10({ onComplete, onBack }) {
     ctx.fillRect(0, 0, w * timerFrac, 5);
 
     // Timer + Score
-    ctx.font = 'bold 20px -apple-system, sans-serif';
+    ctx.font = "bold 20px 'Outfit', 'DM Sans', sans-serif";
     ctx.textAlign = 'right';
     ctx.fillStyle = s.timeLeft < 3 ? '#FF4444' : '#FFF';
     ctx.shadowColor = s.timeLeft < 3 ? '#FF4444' : '#F5A623';
@@ -663,9 +666,9 @@ export default function Game10sur10({ onComplete, onBack }) {
     ctx.shadowBlur = 6;
     ctx.fillText(`${Math.round(s.score)}`, 16, 34);
     ctx.shadowBlur = 0;
-    ctx.font = '11px -apple-system, sans-serif';
+    ctx.font = "11px 'Outfit', 'DM Sans', sans-serif";
     ctx.fillStyle = '#667';
-    ctx.fillText('pts', 16 + ctx.measureText(`${Math.round(s.score)}`).width + 4, 34);
+    ctx.fillText(t(UI_STRINGS.pts), 16 + ctx.measureText(`${Math.round(s.score)}`).width + 4, 34);
 
     ctx.restore();
   }, [phase, sounds, haptics, juice, spawnParticles, spawnTrail, resetToken, drawParrot]));
