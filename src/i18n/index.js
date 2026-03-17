@@ -146,6 +146,90 @@ export const UI_STRINGS = {
     fr: 'Tous', en: 'All', es: 'Todos', de: 'Alle', el: 'Όλα',
     zh: '全部', ja: 'すべて', hi: 'सभी', pt: 'Todos', ru: 'Все',
   },
+  holdToRest: {
+    fr: 'Maintenir pour dormir', en: 'Hold to rest', es: 'Mantén para descansar', de: 'Halten zum Ruhen', el: 'Κρατήστε για ξεκούραση',
+    zh: '按住休息', ja: 'ホールドで休む', hi: 'आराम के लिए दबाएं', pt: 'Segure para descansar', ru: 'Удерживайте для отдыха',
+  },
+  releaseToFly: {
+    fr: 'Relâcher pour voler', en: 'Release to fly', es: 'Suelta para volar', de: 'Loslassen zum Fliegen', el: 'Αφήστε για πτήση',
+    zh: '松开飞行', ja: 'リリースで飛ぶ', hi: 'उड़ने के लिए छोड़ें', pt: 'Solte para voar', ru: 'Отпустите для полёта',
+  },
+  dontRunOutOfEnergy: {
+    fr: "Ne tombez pas en panne d'énergie !", en: "Don't run out of energy!", es: '¡No te quedes sin energía!', de: 'Lass die Energie nicht ausgehen!', el: 'Μην αφήσετε την ενέργεια να τελειώσει!',
+    zh: '别耗尽能量！', ja: 'エネルギーを切らさないで！', hi: 'ऊर्जा खत्म न होने दें!', pt: 'Não fique sem energia!', ru: 'Не допустите конца энергии!',
+  },
+  outOfEnergy: {
+    fr: 'Plus d\'énergie !', en: 'Out of Energy!', es: '¡Sin energía!', de: 'Energie aufgebraucht!', el: 'Χωρίς ενέργεια!',
+    zh: '能量耗尽！', ja: 'エネルギー切れ！', hi: 'ऊर्जा खत्म!', pt: 'Sem energia!', ru: 'Энергия кончилась!',
+  },
+  timesUp: {
+    fr: 'Temps écoulé !', en: "Time's Up!", es: '¡Se acabó el tiempo!', de: 'Zeit abgelaufen!', el: 'Ο χρόνος τελείωσε!',
+    zh: '时间到！', ja: '時間切れ！', hi: 'समय खत्म!', pt: 'Tempo esgotado!', ru: 'Время вышло!',
+  },
+  energy: {
+    fr: 'Énergie', en: 'Energy', es: 'Energía', de: 'Energie', el: 'Ενέργεια',
+    zh: '能量', ja: 'エネルギー', hi: 'ऊर्जा', pt: 'Energia', ru: 'Энергия',
+  },
+  flying: {
+    fr: 'EN VOL', en: 'FLYING', es: 'VOLANDO', de: 'FLUG', el: 'ΠΤΗΣΗ',
+    zh: '飞行中', ja: '飛行中', hi: 'उड़ान', pt: 'VOANDO', ru: 'ПОЛЁТ',
+  },
+  torpor: {
+    fr: 'TORPEUR', en: 'TORPOR', es: 'LETARGO', de: 'ERSTARRUNG', el: 'ΝΑΡΚΗ',
+    zh: '蛰伏', ja: '休眠', hi: 'सुषुप्ति', pt: 'TORPOR', ru: 'ОЦЕПЕНЕНИЕ',
+  },
+  continueBtn: {
+    fr: 'Continuer', en: 'Continue', es: 'Continuar', de: 'Weiter', el: 'Συνέχεια',
+    zh: '继续', ja: '続ける', hi: 'जारी रखें', pt: 'Continuar', ru: 'Продолжить',
+  },
+  back: {
+    fr: 'Retour', en: 'Back', es: 'Volver', de: 'Zurück', el: 'Πίσω',
+    zh: '返回', ja: '戻る', hi: 'वापस', pt: 'Voltar', ru: 'Назад',
+  },
+  perfect: {
+    fr: 'PARFAIT !', en: 'PERFECT!', es: '¡PERFECTO!', de: 'PERFEKT!', el: 'ΤΕΛΕΙΟ!',
+    zh: '完美！', ja: 'パーフェクト！', hi: 'परफेक्ट!', pt: 'PERFEITO!', ru: 'ОТЛИЧНО!',
+  },
+  good: {
+    fr: 'BIEN !', en: 'GOOD!', es: '¡BIEN!', de: 'GUT!', el: 'ΚΑΛΑ!',
+    zh: '好！', ja: 'グッド！', hi: 'अच्छा!', pt: 'BOM!', ru: 'ХОРОШО!',
+  },
+  miss: {
+    fr: 'RATÉ', en: 'MISS', es: 'FALLO', de: 'DANEBEN', el: 'ΑΣΤΟΧΙΑ',
+    zh: '未命中', ja: 'ミス', hi: 'चूक', pt: 'FALHOU', ru: 'ПРОМАХ',
+  },
+  tapInSync: {
+    fr: 'Tapez en rythme avec le pouls', en: 'Tap in sync with the pulse', es: 'Toca en sincronía con el pulso', de: 'Tippe im Takt mit dem Puls', el: 'Πατήστε στο ρυθμό του παλμού',
+    zh: '跟着脉搏节奏点击', ja: 'パルスに合わせてタップ', hi: 'नब्ज के साथ टैप करें', pt: 'Toque em sincronia com o pulso', ru: 'Нажимайте в ритм с пульсом',
+  },
+  bestStreak: {
+    fr: 'Meilleure série', en: 'Best Streak', es: 'Mejor racha', de: 'Beste Serie', el: 'Καλύτερο σερί',
+    zh: '最佳连击', ja: 'ベストストリーク', hi: 'सर्वश्रेष्ठ श्रृंखला', pt: 'Melhor sequência', ru: 'Лучшая серия',
+  },
+  flyingTimeScore: {
+    fr: 'score de temps de vol', en: 'flying time score', es: 'puntuación de tiempo de vuelo', de: 'Flugzeit-Punktzahl', el: 'σκορ χρόνου πτήσης',
+    zh: '飞行时间得分', ja: '飛行時間スコア', hi: 'उड़ान समय स्कोर', pt: 'pontuação de tempo de voo', ru: 'очки полётного времени',
+  },
+  torporFact: {
+    fr: 'Les colibris descendent à 3,3°C en torpeur !', en: 'Hummingbirds drop to 3.3°C in torpor!', es: '¡Los colibríes bajan a 3,3°C en letargo!', de: 'Kolibris sinken im Torpor auf 3,3°C!', el: 'Τα κολιμπρί πέφτουν στους 3,3°C σε νάρκη!',
+    zh: '蜂鸟在蛰伏时体温降至3.3°C！', ja: 'ハチドリは休眠時に3.3°Cまで下がります！', hi: 'हमिंगबर्ड सुषुप्ति में 3.3°C तक गिर जाते हैं!', pt: 'Os beija-flores descem a 3,3°C em torpor!', ru: 'Колибри опускаются до 3,3°C в оцепенении!',
+  },
+  heartbeatFact: {
+    fr: 'Le cœur d\'un colibri bat 1 260 fois par minute !', en: "A hummingbird's heart beats 1,260 times per minute!", es: '¡El corazón de un colibrí late 1.260 veces por minuto!', de: 'Das Herz eines Kolibris schlägt 1.260 Mal pro Minute!', el: 'Η καρδιά ενός κολιμπρί χτυπά 1.260 φορές το λεπτό!',
+    zh: '蜂鸟的心脏每分钟跳动1260次！', ja: 'ハチドリの心臓は1分間に1,260回鼓動します！', hi: 'हमिंगबर्ड का दिल प्रति मिनट 1,260 बार धड़कता है!', pt: 'O coração de um beija-flor bate 1.260 vezes por minuto!', ru: 'Сердце колибри бьётся 1 260 раз в минуту!',
+  },
+  nextGame: {
+    fr: 'Jeu suivant', en: 'Next Game', es: 'Siguiente juego', de: 'Nächstes Spiel', el: 'Επόμενο παιχνίδι',
+    zh: '下一个游戏', ja: '次のゲーム', hi: 'अगला गेम', pt: 'Próximo jogo', ru: 'Следующая игра',
+  },
+  goldenTickets: {
+    fr: 'Golden Tickets', en: 'Golden Tickets', es: 'Golden Tickets', de: 'Golden Tickets', el: 'Golden Tickets',
+    zh: '黄金票', ja: 'ゴールデンチケット', hi: 'गोल्डन टिकट', pt: 'Golden Tickets', ru: 'Золотые билеты',
+  },
+  loading: {
+    fr: 'Chargement...', en: 'Loading...', es: 'Cargando...', de: 'Laden...', el: 'Φόρτωση...',
+    zh: '加载中...', ja: '読み込み中...', hi: 'लोड हो रहा है...', pt: 'Carregando...', ru: 'Загрузка...',
+  },
 };
 
 // ---------------------------------------------------------------------------

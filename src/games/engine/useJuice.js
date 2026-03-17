@@ -79,7 +79,7 @@ export default function useJuice() {
   // Neon text with glow
   const drawNeonText = useCallback((ctx, text, x, y, color, fontSize = 24) => {
     ctx.save();
-    ctx.font = `bold ${fontSize}px -apple-system, sans-serif`;
+    ctx.font = `bold ${fontSize}px 'Outfit', sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // Outer glow

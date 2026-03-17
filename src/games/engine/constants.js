@@ -16,6 +16,14 @@ export const COLORS = {
   amber: '#F59E0B',
   sky: '#0EA5E9',
   emerald: '#10B981',
+  colhybriTeal: '#0D9488',
+  colhybriTealLight: '#14B8A6',
+  colhybriGold: '#D97706',
+  sunsetOrange: '#F97316',
+  sunsetMagenta: '#DB2777',
+  navy: '#1B2A4A',
+  cream: '#FEF7ED',
+  dark: '#0F172A',
 };
 
 export const GAMES = [
