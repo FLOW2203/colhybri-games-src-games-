@@ -766,7 +766,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
             textShadow: 'none',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             sounds.tick();
             haptics.tapFeedback();
@@ -779,7 +779,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
             boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -793,7 +793,7 @@ export default function GameSuperDisperseur({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

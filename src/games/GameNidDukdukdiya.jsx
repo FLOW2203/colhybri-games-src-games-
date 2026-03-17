@@ -5,12 +5,14 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 45;
 const POOL_SIZE = 100;
 const WIND_INTERVAL = 8;
 const MATERIAL_TYPES = ['twig', 'leaf', 'moss', 'flower'];
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameNidDukdukdiya({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -21,6 +23,7 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     score: 0,
@@ -221,7 +224,7 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
       juice.drawGlow(ctx, w / 2, h / 2 - 70, 120, '#F5A623', 0.25);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Nid de Dukdukdiya', w / 2, h / 2 - 70, '#F5A623', 26);
+      juice.drawNeonText(ctx, t(GAME_NAMES['24']), w / 2, h / 2 - 70, '#F5A623', 26);
 
       ctx.font = `16px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -240,7 +243,7 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
       // Pulsing start text
       const pulse = 0.6 + 0.4 * Math.sin(elapsed * 4);
       ctx.globalAlpha = pulse;
-      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.mint, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), w / 2, h / 2 + 120, COLORS.mint, 20);
       ctx.globalAlpha = 1;
 
       ctx.restore();
@@ -538,7 +541,7 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
     }
 
     // Score — neon text
-    juice.drawNeonText(ctx, `Score: ${s.score}`, 70, 40, COLORS.mint, 22);
+    juice.drawNeonText(ctx, t(UI_STRINGS.score) + ': ' + s.score, 70, 40, COLORS.mint, 22);
 
     // Timer — neon with red glow when low
     const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.white;
@@ -620,7 +623,7 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.mint}60, 0 4px 15px rgba(0,0,0,0.3)`,
             textShadow: '0 1px 2px rgba(0,0,0,0.2)',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => { sounds.tick(); haptics.tapFeedback(); onBack(); }} style={{
             background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
             color: COLORS.gray, border: `1px solid ${COLORS.gray}50`,
@@ -629,7 +632,7 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
             boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
             backdropFilter: 'blur(4px)',
             WebkitBackdropFilter: 'blur(4px)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -640,7 +643,7 @@ export default function GameNidDukdukdiya({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

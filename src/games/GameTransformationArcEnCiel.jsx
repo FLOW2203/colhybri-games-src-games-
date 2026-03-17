@@ -5,12 +5,14 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 45;
 const POOL_SIZE = 150;
 const MAX_LIVES = 3;
 const MAX_DEPTH = 100;
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -21,6 +23,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     score: 0,
@@ -227,7 +230,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Transformation Arc-en-ciel', w / 2, h / 2 - 70, COLORS.gold, 22);
+      juice.drawNeonText(ctx, t(GAME_NAMES['10']), w / 2, h / 2 - 70, COLORS.gold, 22);
 
       ctx.font = `16px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -245,7 +248,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
 
       // Pulsing start text
       const pulse = 0.7 + Math.sin(elapsed * 3) * 0.3;
-      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.white, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), w / 2, h / 2 + 120, COLORS.white, 20);
       ctx.globalAlpha = pulse;
       juice.drawGlow(ctx, w / 2, h / 2 + 120, 80, COLORS.mint, 0.2);
       ctx.globalAlpha = 1;
@@ -589,7 +592,7 @@ export default function GameTransformationArcEnCiel({ onComplete, onBack }) {
     }
 
     // Score - neon text
-    juice.drawNeonText(ctx, `Score: ${s.score}`, 90, 40, COLORS.white, 22);
+    juice.drawNeonText(ctx, `${t(UI_STRINGS.score)}: ${s.score}`, 90, 40, COLORS.white, 22);
 
     // Timer - neon text
     const timerColor = s.timeLeft < 5 ? COLORS.red : COLORS.white;

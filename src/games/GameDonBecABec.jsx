@@ -5,12 +5,14 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 30;
 const POOL_SIZE = 100;
 const MAX_TOKENS = 10;
 const SELFISH_TIMEOUT = 3;
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameDonBecABec({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -21,6 +23,7 @@ export default function GameDonBecABec({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     score: 0,
@@ -261,7 +264,7 @@ export default function GameDonBecABec({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Don Bec-a-Bec', w / 2, h / 2 - 70, COLORS.mint, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['09']), w / 2, h / 2 - 70, COLORS.mint, 28);
 
       // Subtitle with glow
       ctx.save();
@@ -284,7 +287,7 @@ export default function GameDonBecABec({ onComplete, onBack }) {
       const pulse = 0.7 + 0.3 * Math.sin(elapsed * 4);
       ctx.save();
       ctx.globalAlpha = pulse;
-      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 120, COLORS.white, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), w / 2, h / 2 + 120, COLORS.white, 20);
       ctx.restore();
 
       // Decorative glow behind title
@@ -645,7 +648,7 @@ export default function GameDonBecABec({ onComplete, onBack }) {
               textShadow: '0 1px 2px rgba(0,0,0,0.2)',
             }}
           >
-            Continue
+            {t(UI_STRINGS.continueBtn)}
           </button>
           <button
             onClick={() => {
@@ -666,7 +669,7 @@ export default function GameDonBecABec({ onComplete, onBack }) {
               boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
             }}
           >
-            Back
+            {t(UI_STRINGS.back)}
           </button>
         </div>
       )}
