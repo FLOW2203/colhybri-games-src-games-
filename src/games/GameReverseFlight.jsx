@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 30;
 const POOL_SIZE = 100;
@@ -18,7 +20,7 @@ const FLOWER_SPAWN_INTERVAL = 3.5;
 const SCROLL_SPEED = 120;
 const REVERSE_SPEED = -80;
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameReverseFlight({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -28,6 +30,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     birdX: 0,
@@ -167,7 +170,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Reverse Flight', w / 2, cy - 60, COLORS.mint, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['03']), w / 2, cy - 60, COLORS.mint, 28);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -185,7 +188,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
       // Pulsing neon "TAP TO START"
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', w / 2, cy + 110, COLORS.cyan, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), w / 2, cy + 110, COLORS.cyan, 20);
       ctx.globalAlpha = 1;
 
       // Glow behind title
@@ -648,7 +651,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
     ctx.shadowColor = energyColor;
     ctx.shadowBlur = 6;
     ctx.fillStyle = COLORS.white;
-    ctx.fillText('ENERGY', barX, barY + barH + 12);
+    ctx.fillText(t(UI_STRINGS.energy), barX, barY + barH + 12);
     ctx.shadowBlur = 0;
     ctx.restore();
 
@@ -703,7 +706,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
           <div style={{
             color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
             textShadow: `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`,
-          }}>Results</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.mint, fontSize: 20, marginBottom: 8,
             textShadow: `0 0 12px ${COLORS.mint}`,
@@ -725,7 +728,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
           <div style={{
             color: COLORS.gray, fontSize: 14, marginBottom: 24,
             textShadow: `0 0 8px ${COLORS.gray}80`,
-          }}>score</div>
+          }}>{t(UI_STRINGS.score)}</div>
           <button onClick={() => {
             haptics.tapFeedback();
             sounds.pop();
@@ -743,7 +746,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.cyan}60, 0 0 40px ${COLORS.cyan}30`,
             textShadow: 'none',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             haptics.tapFeedback();
             onBack();
@@ -759,7 +762,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
             textShadow: `0 0 8px ${COLORS.gray}40`,
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -773,7 +776,7 @@ export default function GameReverseFlight({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

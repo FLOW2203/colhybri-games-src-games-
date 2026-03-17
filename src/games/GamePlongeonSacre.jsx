@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 45;
 const POOL_SIZE = 120;
@@ -14,7 +16,7 @@ const MAX_ENERGY = 100;
 const MAX_WATER_GAUGE = 100;
 const PARROT_RADIUS = 18;
 const COLLISION_COOLDOWN = 0.5;
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GamePlongeonSacre({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -25,6 +27,7 @@ export default function GamePlongeonSacre({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     score: 0,
@@ -243,7 +246,7 @@ export default function GamePlongeonSacre({ onComplete, onBack }) {
       ctx.fillStyle = '#0A0F1C';
       ctx.fillRect(0, 0, w, h);
 
-      juice.drawNeonText(ctx, 'Plongeon Sacre', w / 2, h / 2 - 80, COLORS.water, 26);
+      juice.drawNeonText(ctx, t(GAME_NAMES['14']), w / 2, h / 2 - 80, COLORS.water, 26);
 
       ctx.font = `15px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -257,7 +260,7 @@ export default function GamePlongeonSacre({ onComplete, onBack }) {
       ctx.fillText('SWIPE UP: fly to fire zone', w / 2, h / 2 + 75);
       ctx.fillText('TAP: release water drops on fire', w / 2, h / 2 + 95);
 
-      juice.drawNeonText(ctx, 'TAP TO START', w / 2, h / 2 + 140, COLORS.mint, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), w / 2, h / 2 + 140, COLORS.mint, 20);
 
       ctx.restore();
       return;
@@ -608,7 +611,7 @@ export default function GamePlongeonSacre({ onComplete, onBack }) {
     ctx.font = `bold 22px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
     ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 40, 40);
+    ctx.fillText(t(UI_STRINGS.score) + ': ' + s.score, 40, 40);
     ctx.font = `bold 24px ${FONT_FAMILY}`;
     ctx.textAlign = 'right';
     ctx.fillStyle = s.timeLeft < 5 ? COLORS.red : COLORS.white;
@@ -649,7 +652,7 @@ export default function GamePlongeonSacre({ onComplete, onBack }) {
             color: COLORS.white, fontSize: 30, fontWeight: 'bold', marginBottom: 8,
             fontFamily: FONT_FAMILY,
             textShadow: '0 0 20px rgba(0,191,255,0.6), 0 0 40px rgba(0,191,255,0.3)',
-          }}>Sacred Dive!</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.water, fontSize: 48, fontWeight: 'bold', marginBottom: 8,
             fontFamily: FONT_FAMILY,
@@ -675,7 +678,7 @@ export default function GamePlongeonSacre({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             textShadow: '0 1px 2px rgba(0,0,0,0.2)',
             boxShadow: '0 4px 20px rgba(46,234,163,0.3), 0 0 40px rgba(46,234,163,0.15)',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={onBack} style={{
             background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
             color: COLORS.gray, border: `1px solid rgba(156,163,175,0.3)`,
@@ -684,7 +687,7 @@ export default function GamePlongeonSacre({ onComplete, onBack }) {
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
             textShadow: '0 0 8px rgba(156,163,175,0.3)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -695,7 +698,7 @@ export default function GamePlongeonSacre({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );
