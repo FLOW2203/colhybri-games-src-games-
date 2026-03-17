@@ -5,8 +5,10 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 const GAME_DURATION = 60;
 const GOAL_KM = 800;
 const FAT_MAX = 2.0;
@@ -22,6 +24,7 @@ export default function Game800km({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -226,7 +229,7 @@ export default function Game800km({ onComplete, onBack }) {
       ctx.stroke();
 
       // Title with neon glow
-      juice.drawNeonText(ctx, '800km La Traversee', cx, cy - 90, COLORS.cyan, 26);
+      juice.drawNeonText(ctx, t(GAME_NAMES['04']), cx, cy - 90, COLORS.cyan, 26);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -240,7 +243,7 @@ export default function Game800km({ onComplete, onBack }) {
       // Pulsing TAP TO START with neon
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 90, COLORS.mint, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 90, COLORS.mint, 20);
       ctx.globalAlpha = 1;
 
       // Glow on title

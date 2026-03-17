@@ -5,11 +5,13 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 15;
 const TARGET_LITRES = 11;
 const POOL_SIZE = 100;
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function Game11Litres({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -18,6 +20,7 @@ export default function Game11Litres({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     litres: 0,
@@ -158,7 +161,7 @@ export default function Game11Litres({ onComplete, onBack }) {
       ctx.fill();
 
       // Title with neon effect
-      juice.drawNeonText(ctx, '11 Litres', cx, h * 0.25, '#00D4FF', 32);
+      juice.drawNeonText(ctx, t(GAME_NAMES['17']), cx, h * 0.25, '#00D4FF', 32);
 
       // Subtitle
       ctx.font = `18px ${FONT_FAMILY}`;
