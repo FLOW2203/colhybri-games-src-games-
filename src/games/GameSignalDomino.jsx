@@ -5,12 +5,14 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 30;
 const PELICAN_COUNT = 6;
 const TAP_WINDOW = 200;
 const POOL_SIZE = 100;
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameSignalDomino({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -20,6 +22,7 @@ export default function GameSignalDomino({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -240,7 +243,7 @@ export default function GameSignalDomino({ onComplete, onBack }) {
       }
 
       // Neon title
-      juice.drawNeonText(ctx, 'Signal Domino', cx, cy - 100, COLORS.cyan, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['16']), cx, cy - 100, COLORS.cyan, 28);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -257,7 +260,7 @@ export default function GameSignalDomino({ onComplete, onBack }) {
 
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 130, COLORS.mint, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 130, COLORS.mint, 20);
       ctx.globalAlpha = 1;
 
       ctx.restore();
@@ -498,7 +501,7 @@ export default function GameSignalDomino({ onComplete, onBack }) {
     ctx.shadowColor = COLORS.cyan;
     ctx.shadowBlur = 12;
     ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${s.score}`, 20, 40);
+    ctx.fillText(t(UI_STRINGS.score) + ': ' + s.score, 20, 40);
     ctx.shadowBlur = 0;
     ctx.restore();
 
@@ -555,7 +558,7 @@ export default function GameSignalDomino({ onComplete, onBack }) {
             fontWeight: 'bold',
             marginBottom: 12,
             textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}80`,
-          }}>Time's Up!</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.cyan,
             fontSize: 48,
@@ -596,7 +599,7 @@ export default function GameSignalDomino({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.cyan}80, 0 0 40px ${COLORS.cyan}40`,
             textShadow: 'none',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             sounds.tick();
             haptics.tapFeedback();
@@ -613,7 +616,7 @@ export default function GameSignalDomino({ onComplete, onBack }) {
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
             textShadow: `0 0 8px ${COLORS.gray}40`,
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -626,7 +629,7 @@ export default function GameSignalDomino({ onComplete, onBack }) {
           fontSize: 14, cursor: 'pointer', zIndex: 10, fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

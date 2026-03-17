@@ -5,13 +5,15 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 15;
 const HUMMINGBIRD_BPS = 80;
 const POOL_SIZE = 100;
 const FLOAT_TEXT_POOL = 20;
 const SHOCKWAVE_POOL = 5;
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 
 export default function GameWingBeat({ onComplete, onBack }) {
   const canvasRef = useRef(null);
@@ -21,6 +23,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     totalTaps: 0,
@@ -204,7 +207,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Wing Beat Challenge', cx, cy - 60, COLORS.mint, 28);
+      juice.drawNeonText(ctx, t(GAME_NAMES['05']), cx, cy - 60, COLORS.mint, 28);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -217,7 +220,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
 
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, COLORS.cyan, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 110, COLORS.cyan, 20);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -618,7 +621,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
             color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
             textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}40`,
             fontFamily: FONT_FAMILY,
-          }}>Results</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.mint, fontSize: 20, marginBottom: 8,
             textShadow: `0 0 12px ${COLORS.mint}80`,
@@ -664,7 +667,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 4px 20px ${COLORS.cyan}40`,
             textShadow: 'none',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={onBack} style={{
             background: 'rgba(255,255,255,0.08)',
             color: COLORS.gray,
@@ -676,7 +679,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             backdropFilter: 'blur(10px)',
             WebkitBackdropFilter: 'blur(10px)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -687,7 +690,7 @@ export default function GameWingBeat({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );
