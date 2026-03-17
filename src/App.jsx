@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import GameMenu from './components/GameMenu';
 import NarrativeIntro from './components/NarrativeIntro';
 import GamePostScreen from './components/GamePostScreen';
+import LoadingScreenUI from './components/ui/LoadingScreen';
 import { useLocale } from './hooks/useLocale';
 import useGamePoints from './hooks/useGamePoints';
 import { GAMES } from './games/engine/constants';
@@ -45,17 +46,7 @@ const gameComponents = {
 };
 
 function LoadingScreen() {
-  return (
-    <div className="h-full w-full flex items-center justify-center bg-primary">
-      <motion.div
-        animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-        transition={{ duration: 1.5, repeat: Infinity }}
-        className="text-4xl"
-      >
-        🐦
-      </motion.div>
-    </div>
-  );
+  return <LoadingScreenUI />;
 }
 
 export default function App() {

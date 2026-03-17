@@ -639,7 +639,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
       ctx.fillStyle = COLORS.mint;
       ctx.shadowColor = COLORS.mint;
       ctx.shadowBlur = 6;
-      ctx.fillText(`Streak: ${s.streak}`, w - 20, 65);
+      ctx.fillText(t(UI_STRINGS.streak) + ': ' + s.streak, w - 20, 65);
       ctx.shadowBlur = 0;
     }
 
@@ -728,7 +728,7 @@ export default function GameTimbreExpress({ onComplete, onBack }) {
             textShadow: `0 0 10px ${COLORS.gold}`,
             fontFamily: FONT_FAMILY,
           }}>
-            Best Streak: {state.current.maxStreak}
+            {t(UI_STRINGS.bestStreak)}: {state.current.maxStreak}
           </div>
           <div style={{
             color: COLORS.cyan,

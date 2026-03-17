@@ -588,7 +588,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
 
     // Streak
     if (s.streak > 0) {
-      juice.drawNeonText(ctx, `Streak: ${s.streak}x`, cx, h * 0.35, '#2EEAA3', 16);
+      juice.drawNeonText(ctx, t(UI_STRINGS.streak) + ': ' + s.streak + 'x', cx, h * 0.35, '#2EEAA3', 16);
       juice.drawGlow(ctx, cx, h * 0.35, 40, '#2EEAA3', 0.15);
     }
 
@@ -668,7 +668,7 @@ export default function GamePerroquetComprend({ onComplete, onBack }) {
             color: COLORS.cyan, fontSize: 16, marginBottom: 4,
             textShadow: '0 0 10px rgba(91,224,255,0.5)',
           }}>
-            Best streak: {state.current.bestStreak}x
+            {t(UI_STRINGS.bestStreak)}: {state.current.bestStreak}x
           </div>
           <div style={{
             color: COLORS.white, fontSize: 44, fontWeight: 'bold', marginBottom: 4,
