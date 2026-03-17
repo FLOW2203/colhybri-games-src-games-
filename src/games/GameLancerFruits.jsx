@@ -715,7 +715,7 @@ export default function GameLancerFruits({ onComplete, onBack }) {
     ctx.restore();
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnParticles, spawnTrail, setupFruit, drawToucan]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnTrail, setupFruit, drawToucan, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();

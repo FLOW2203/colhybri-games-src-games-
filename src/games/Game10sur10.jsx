@@ -363,23 +363,23 @@ export default function Game10sur10({ onComplete, onBack }) {
     s.leftParrotBob = elapsed * 2.5;
     s.rightParrotBob = elapsed * 2.5 + 1;
 
-    const t = s.currentToken;
+    const tk = s.currentToken;
 
     // Flying token
-    if (t.flying) {
-      t.flyProgress += delta * 3.5;
-      const p = Math.min(1, t.flyProgress);
+    if (tk.flying) {
+      tk.flyProgress += delta * 3.5;
+      const p = Math.min(1, tk.flyProgress);
       const ease = 1 - Math.pow(1 - p, 3);
-      t.x = t.startX + (t.endX - t.startX) * ease;
+      tk.x = tk.startX + (tk.endX - tk.startX) * ease;
       const arcHeight = -100;
-      t.y = t.startY + (t.endY - t.startY) * ease + arcHeight * Math.sin(p * Math.PI);
-      spawnTrail(t.x, t.y);
+      tk.y = tk.startY + (tk.endY - tk.startY) * ease + arcHeight * Math.sin(p * Math.PI);
+      spawnTrail(tk.x, tk.y);
 
       if (p >= 1) {
-        t.active = false; t.flying = false;
+        tk.active = false; tk.flying = false;
         s.tokensGiven++;
         const now = performance.now();
-        const hesitation = (now - t.spawnTime) / 1000;
+        const hesitation = (now - tk.spawnTime) / 1000;
 
         if (hesitation < 0.5) { s.consecutiveSpeed++; }
         else if (hesitation < 1.0) { s.consecutiveSpeed = Math.max(0, s.consecutiveSpeed - 1); }
@@ -391,15 +391,15 @@ export default function Game10sur10({ onComplete, onBack }) {
 
         if (hesitation < 0.5) {
           s.feedbackText = `${t(UI_STRINGS.fast)} ×${s.multiplier.toFixed(1)}`;
-          spawnParticles(t.endX, t.endY, 18, 46, 234, 163, { maxSpeed: 300, upBias: 40 });
-          s.shockwaves.push({ x: t.endX, y: t.endY, radius: 15, maxRadius: 120, life: 0.4, maxLife: 0.4, color: 'rgba(46,234,163,0.5)' });
+          spawnParticles(tk.endX, tk.endY, 18, 46, 234, 163, { maxSpeed: 300, upBias: 40 });
+          s.shockwaves.push({ x: tk.endX, y: tk.endY, radius: 15, maxRadius: 120, life: 0.4, maxLife: 0.4, color: 'rgba(46,234,163,0.5)' });
           juice.shake(5, 0.12);
           juice.flash('#2EEAA3', 0.15);
           haptics.comboFeedback(s.consecutiveSpeed);
           sounds.combo(s.consecutiveSpeed);
         } else if (hesitation < 1.0) {
           s.feedbackText = `${t(UI_STRINGS.ok)} ×${s.multiplier.toFixed(1)}`;
-          spawnParticles(t.endX, t.endY, 10, 245, 166, 35);
+          spawnParticles(tk.endX, tk.endY, 10, 245, 166, 35);
           haptics.tapFeedback();
           sounds.pop();
         } else {
@@ -407,7 +407,7 @@ export default function Game10sur10({ onComplete, onBack }) {
           haptics.failFeedback();
         }
         s.feedbackTimer = 0.8;
-        s.floatingTexts.push({ text: `+${tokenScore.toFixed(1)}`, x: t.endX, y: t.endY - 30, life: 0.8, color: hesitation < 0.5 ? '#2EEAA3' : '#F5A623', size: 22 });
+        s.floatingTexts.push({ text: `+${tokenScore.toFixed(1)}`, x: tk.endX, y: tk.endY - 30, life: 0.8, color: hesitation < 0.5 ? '#2EEAA3' : '#F5A623', size: 22 });
 
         if (s.tokensGiven < TOTAL_TOKENS) setTimeout(() => resetToken(w, h), 180);
         setDisplayScore(Math.round(s.score));
@@ -530,9 +530,9 @@ export default function Game10sur10({ onComplete, onBack }) {
     }
 
     // Token
-    if (t.active) {
+    if (tk.active) {
       ctx.save();
-      ctx.translate(t.x, t.y);
+      ctx.translate(tk.x, tk.y);
 
       // Outer glow
       juice.drawGlow(ctx, 0, 0, 45, '#F5A623', 0.25);
@@ -671,7 +671,7 @@ export default function Game10sur10({ onComplete, onBack }) {
     ctx.fillText(t(UI_STRINGS.pts), 16 + ctx.measureText(`${Math.round(s.score)}`).width + 4, 34);
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnParticles, spawnTrail, resetToken, drawParrot]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnTrail, resetToken, drawParrot, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -700,22 +700,22 @@ export default function Game10sur10({ onComplete, onBack }) {
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)',
         }}>
-          <div style={{ color: '#AAB', fontSize: 16, letterSpacing: 4, marginBottom: 8, textTransform: 'uppercase' }}>10 sur 10</div>
+          <div style={{ color: '#AAB', fontSize: 16, letterSpacing: 4, marginBottom: 8, textTransform: 'uppercase' }}>{t(GAME_NAMES['13'])}</div>
           <div style={{
             color: '#F5A623', fontSize: 56, fontWeight: 'bold', marginBottom: 4,
             textShadow: '0 0 30px rgba(245,166,35,0.5)',
           }}>{displayScore}</div>
-          <div style={{ color: '#667', fontSize: 14, marginBottom: 4 }}>{state.current.tokensGiven}/{TOTAL_TOKENS} tokens</div>
-          <div style={{ color: '#556', fontSize: 13, marginBottom: 32 }}>Parrots share without hesitation!</div>
+          <div style={{ color: '#667', fontSize: 14, marginBottom: 4 }}>{state.current.tokensGiven}/{TOTAL_TOKENS} {t(UI_STRINGS.tokens)}</div>
+          <div style={{ color: '#556', fontSize: 13, marginBottom: 32 }}>{t(UI_STRINGS.parrotsShareWithoutHesitation)}</div>
           <button onClick={() => onComplete(state.current.score)} style={{
             background: 'linear-gradient(135deg, #F5A623, #FFD700)', color: '#0A0F1C', border: 'none',
             padding: '14px 48px', borderRadius: 14, fontSize: 18, fontWeight: 'bold', cursor: 'pointer',
             marginBottom: 12, boxShadow: '0 0 20px rgba(245,166,35,0.3)',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={onBack} style={{
             background: 'transparent', color: '#667', border: '1px solid #334',
             padding: '10px 30px', borderRadius: 12, fontSize: 14, cursor: 'pointer',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -723,7 +723,7 @@ export default function Game10sur10({ onComplete, onBack }) {
           position: 'absolute', top: 12, left: 12, background: 'rgba(255,255,255,0.08)',
           color: '#AAB', border: 'none', borderRadius: 10, padding: '8px 16px',
           fontSize: 13, cursor: 'pointer', zIndex: 10, backdropFilter: 'blur(4px)',
-        }}>← Back</button>
+        }}>{`← ${t(UI_STRINGS.back)}`}</button>
       )}
     </div>
   );

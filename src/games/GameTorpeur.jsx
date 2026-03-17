@@ -627,7 +627,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
     if (s.isFlying) {
       juice.drawNeonText(ctx, t(UI_STRINGS.flying), cx, 80, COLORS.gold, 18);
     } else {
-      juice.drawNeonText(ctx, 'TORPOR', cx, 80, COLORS.cyan, 18);
+      juice.drawNeonText(ctx, t(UI_STRINGS.torpor), cx, 80, COLORS.cyan, 18);
       // Frost overlay on edges
       ctx.fillStyle = `rgba(150,200,255,${bt * 0.08})`;
       ctx.fillRect(0, 0, 30, h);
@@ -658,7 +658,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
     ctx.shadowColor = COLORS.gold;
     ctx.shadowBlur = 12;
     ctx.fillStyle = COLORS.white;
-    ctx.fillText(`Score: ${Math.round(s.score)}`, 20, 40);
+    ctx.fillText(t(UI_STRINGS.score) + ': ' + Math.round(s.score), 20, 40);
     ctx.shadowBlur = 0;
     ctx.restore();
 
@@ -673,7 +673,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
     juice.update(delta);
 
     ctx.restore();
-  }, [phase, spawnParticles, juice, sounds, haptics]));
+  }, [phase, spawnParticles, juice, sounds, haptics, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -727,7 +727,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
               ? `0 0 20px ${COLORS.red}, 0 0 40px ${COLORS.red}`
               : `0 0 15px ${COLORS.gold}, 0 0 30px ${COLORS.gold}`,
           }}>
-            {isEnergyDeath ? 'Out of Energy!' : "Time's Up!"}
+            {isEnergyDeath ? t(UI_STRINGS.outOfEnergy) : t(UI_STRINGS.timesUp)}
           </div>
           <div style={{
             color: COLORS.gold,
@@ -744,7 +744,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
             marginBottom: 4,
             textShadow: `0 0 6px ${COLORS.gray}`,
           }}>
-            flying time score
+            {t(UI_STRINGS.flyingTimeScore)}
           </div>
           <div style={{
             color: COLORS.cyan,
@@ -752,7 +752,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
             marginBottom: 24,
             textShadow: `0 0 10px ${COLORS.cyan}`,
           }}>
-            Hummingbirds drop to 3.3\u00B0C in torpor!
+            {t(UI_STRINGS.torporFact)}
           </div>
           <button onClick={() => {
             sounds.chime();
@@ -771,7 +771,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.gold}80, 0 4px 15px rgba(0,0,0,0.3)`,
             textShadow: '0 1px 2px rgba(0,0,0,0.2)',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             sounds.tick();
             haptics.tapFeedback();
@@ -789,7 +789,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
             WebkitBackdropFilter: 'blur(8px)',
             boxShadow: `0 0 10px rgba(255,255,255,0.05)`,
             textShadow: `0 0 6px ${COLORS.gray}`,
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -803,7 +803,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

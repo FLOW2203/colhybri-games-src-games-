@@ -824,13 +824,13 @@ export default function GameEveilleur({ onComplete, onBack }) {
             color: COLORS.gray, fontSize: 15, marginBottom: 4,
             textShadow: '0 0 8px rgba(255,255,255,0.3)',
           }}>
-            Fire reduced to {Math.floor(state.current.fireHeight * 100)}%
+            {t(STRINGS_EVEILLEUR.fireReduced)} {Math.floor(state.current.fireHeight * 100)}%
           </div>
           <div style={{
             color: COLORS.gray, fontSize: 13, marginBottom: 24,
             textShadow: '0 0 8px rgba(255,255,255,0.2)',
           }}>
-            One spark ignites the collective!
+            {t(STRINGS_EVEILLEUR.oneSparkIgnites)}
           </div>
           <button onClick={() => {
             sounds.pop();
@@ -844,7 +844,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.mint}60, 0 0 40px ${COLORS.mint}30`,
             textShadow: 'none',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             sounds.tick();
             haptics.tapFeedback();
@@ -858,7 +858,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
             WebkitBackdropFilter: 'blur(8px)',
             boxShadow: '0 0 10px rgba(255,255,255,0.05)',
             textShadow: '0 0 6px rgba(255,255,255,0.2)',
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -872,7 +872,7 @@ export default function GameEveilleur({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );
