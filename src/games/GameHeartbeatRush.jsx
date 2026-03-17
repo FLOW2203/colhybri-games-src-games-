@@ -5,6 +5,8 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
 const GAME_DURATION = 30;
 const BPM_START = 250;
@@ -23,6 +25,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     score: 0,
@@ -136,7 +139,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
     if (closestDist <= PERFECT_WINDOW) {
       s.score += 2;
       s.streak++;
-      s.lastTapResult = 'PERFECT!';
+      s.lastTapResult = t(UI_STRINGS.perfect);
       s.lastTapResultTimer = 0.9;
       // Massive particle burst
       spawnParticles(cx, cy, 20, 46, 234, 163, { maxSpeed: 350, upBias: 50, maxSize: 7 });
@@ -151,7 +154,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
     } else if (closestDist <= GOOD_WINDOW) {
       s.score += 1;
       s.streak++;
-      s.lastTapResult = 'GOOD';
+      s.lastTapResult = t(UI_STRINGS.good);
       s.lastTapResultTimer = 0.7;
       spawnParticles(cx, cy, 10, 245, 166, 35, { maxSpeed: 200 });
       s.floatingTexts.push({ text: '+1', x: cx, y: cy - baseR - 20, life: 0.8, color: COLORS.gold, size: 22 });
@@ -159,7 +162,7 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
       haptics.tapFeedback();
     } else {
       s.streak = 0;
-      s.lastTapResult = 'MISS';
+      s.lastTapResult = t(UI_STRINGS.miss);
       s.lastTapResultTimer = 0.5;
       juice.shake(3, 0.1);
       haptics.failFeedback();
@@ -237,17 +240,16 @@ export default function GameHeartbeatRush({ onComplete, onBack }) {
       ctx.restore();
 
       // Neon title
-      juice.drawNeonText(ctx, 'Heartbeat Rush', cx, cy + baseR + 30, '#2EEAA3', 30);
+      juice.drawNeonText(ctx, t(GAME_NAMES['01']), cx, cy + baseR + 30, '#2EEAA3', 30);
 
-      ctx.font = '16px -apple-system, sans-serif';
+      ctx.font = "16px 'Outfit', 'DM Sans', sans-serif";
       ctx.textAlign = 'center';
       ctx.fillStyle = '#AAB';
-      ctx.fillText("A hummingbird's heart beats", cx, cy + baseR + 62);
-      ctx.fillText('1,260 times per minute!', cx, cy + baseR + 84);
+      ctx.fillText(t(UI_STRINGS.heartbeatFact), cx, cy + baseR + 72);
 
-      ctx.font = '14px -apple-system, sans-serif';
+      ctx.font = "14px 'Outfit', 'DM Sans', sans-serif";
       ctx.fillStyle = '#667';
-      ctx.fillText('Tap in sync with the pulse', cx, cy + baseR + 114);
+      ctx.fillText(t(UI_STRINGS.tapInSync), cx, cy + baseR + 114);
 
       const tapAlpha = 0.4 + Math.sin(elapsed * 4) * 0.6;
       ctx.globalAlpha = Math.max(0, tapAlpha);

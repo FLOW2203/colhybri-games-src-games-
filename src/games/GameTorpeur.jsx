@@ -5,8 +5,10 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 const GAME_DURATION = 45;
 const ENERGY_DRAIN_RATE = 18;
 const ENERGY_REGEN_RATE = 12;
@@ -21,6 +23,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const lastWarningTimeRef = useRef(-1);
   const torporSoundCooldownRef = useRef(0);
@@ -337,7 +340,7 @@ export default function GameTorpeur({ onComplete, onBack }) {
     setDisplayScore(Math.round(s.score));
 
     // --- RENDER ---
-    const t = s.bgTransition;
+    const bt = s.bgTransition;
 
     // Background: interpolate warm <-> cold
     const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
