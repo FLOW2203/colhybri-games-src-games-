@@ -752,7 +752,7 @@ export default function Game800km({ onComplete, onBack }) {
     ctx.fillText(`Speed x${s.speed.toFixed(1)}`, 20, 84);
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnParticles, spawnInsect, spawnGust]));
+  }, [phase, sounds, haptics, juice, spawnParticles, spawnInsect, spawnGust, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -804,7 +804,7 @@ export default function Game800km({ onComplete, onBack }) {
               ? `0 0 20px ${COLORS.mint}, 0 0 40px ${COLORS.mint}80`
               : `0 0 20px ${COLORS.red}, 0 0 40px ${COLORS.red}80`,
           }}>
-            {state.current.won ? 'Crossing Complete!' : (state.current.fat <= 0 ? 'Out of Fuel!' : "Time's Up!")}
+            {state.current.won ? 'Crossing Complete!' : (state.current.fat <= 0 ? 'Out of Fuel!' : t(UI_STRINGS.timesUp))}
           </div>
           <div style={{
             color: state.current.won ? COLORS.mint : COLORS.cyan,
@@ -841,7 +841,7 @@ export default function Game800km({ onComplete, onBack }) {
               boxShadow: `0 0 20px ${COLORS.cyan}60, 0 4px 15px rgba(0,0,0,0.3)`,
               textShadow: '0 1px 2px rgba(0,0,0,0.2)',
             }}
-          >Continue</button>
+          >{t(UI_STRINGS.continueBtn)}</button>
           <button
             onClick={() => {
               haptics.tapFeedback();
@@ -860,7 +860,7 @@ export default function Game800km({ onComplete, onBack }) {
               WebkitBackdropFilter: 'blur(8px)',
               boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
             }}
-          >Back</button>
+          >{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -877,7 +877,7 @@ export default function Game800km({ onComplete, onBack }) {
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
           }}
-        >Back</button>
+        >{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

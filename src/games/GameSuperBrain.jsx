@@ -5,8 +5,10 @@ import useSounds from './engine/useSounds';
 import useHaptics from './engine/useHaptics';
 import useJuice from './engine/useJuice';
 import { COLORS } from './engine/constants';
+import { useLocale } from '../hooks/useLocale';
+import { UI_STRINGS, GAME_NAMES } from '../i18n/index';
 
-const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_FAMILY = "'Outfit', 'DM Sans', sans-serif";
 const GAME_DURATION = 60;
 const POOL_SIZE = 100;
 const INITIAL_GRID = 3;
@@ -34,6 +36,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
   const sounds = useSounds();
   const haptics = useHaptics();
   const juice = useJuice();
+  const { t } = useLocale();
 
   const state = useRef({
     timeLeft: GAME_DURATION,
@@ -257,7 +260,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
       ctx.fillRect(0, 0, w, h);
 
       // Neon title
-      juice.drawNeonText(ctx, 'Super Brain', cx, cy - 60, COLORS.cyan, 32);
+      juice.drawNeonText(ctx, t(GAME_NAMES['07']), cx, cy - 60, COLORS.cyan, 32);
 
       ctx.font = `18px ${FONT_FAMILY}`;
       ctx.textAlign = 'center';
@@ -275,7 +278,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
       // Pulsing neon tap-to-start
       const tapAlpha = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = tapAlpha;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, cy + 110, COLORS.gold, 20);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, cy + 110, COLORS.gold, 20);
       ctx.globalAlpha = 1;
 
       // Subtle ambient glow in center
@@ -625,7 +628,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
     }
 
     // Score (neon)
-    juice.drawNeonText(ctx, `Score: ${s.score}`, 80, 40, COLORS.cyan, 20);
+    juice.drawNeonText(ctx, t(UI_STRINGS.score) + ': ' + s.score, 80, 40, COLORS.cyan, 20);
 
     // Lives
     ctx.font = `18px ${FONT_FAMILY}`;
@@ -672,7 +675,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
     juice.applyBloom(ctx, w, h, 0.06);
 
     ctx.restore();
-  }, [phase, sounds, haptics, juice, spawnParticles, getFlowerPositions, startNewRound]));
+  }, [phase, sounds, haptics, juice, spawnParticles, getFlowerPositions, startNewRound, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -723,7 +726,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
             color: COLORS.white, fontSize: 28, fontWeight: 'bold', marginBottom: 16,
             textShadow: `0 0 20px ${COLORS.cyan}, 0 0 40px ${COLORS.cyan}`,
             fontFamily: FONT_FAMILY,
-          }}>Results</div>
+          }}>{t(UI_STRINGS.timesUp)}</div>
           <div style={{
             color: COLORS.mint, fontSize: 20, marginBottom: 8,
             textShadow: `0 0 10px ${COLORS.mint}`,
@@ -755,7 +758,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
           <div style={{
             color: COLORS.gray, fontSize: 14, marginBottom: 24,
             fontFamily: FONT_FAMILY,
-          }}>points</div>
+          }}>{t(UI_STRINGS.points)}</div>
           <button onClick={() => {
             haptics.tapFeedback();
             sounds.chime();
@@ -773,7 +776,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
             fontFamily: FONT_FAMILY,
             boxShadow: `0 0 20px ${COLORS.cyan}80, 0 0 40px ${COLORS.cyan}40`,
             textShadow: 'none',
-          }}>Continue</button>
+          }}>{t(UI_STRINGS.continueBtn)}</button>
           <button onClick={() => {
             haptics.tapFeedback();
             onBack();
@@ -790,7 +793,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
             WebkitBackdropFilter: 'blur(8px)',
             boxShadow: `0 0 10px rgba(255,255,255,0.05)`,
             textShadow: `0 0 6px ${COLORS.gray}`,
-          }}>Back</button>
+          }}>{t(UI_STRINGS.back)}</button>
         </div>
       )}
       {phase !== 'ended' && (
@@ -804,7 +807,7 @@ export default function GameSuperBrain({ onComplete, onBack }) {
           fontFamily: FONT_FAMILY,
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
-        }}>Back</button>
+        }}>{t(UI_STRINGS.back)}</button>
       )}
     </div>
   );

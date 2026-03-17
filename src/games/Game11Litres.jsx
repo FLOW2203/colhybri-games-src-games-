@@ -180,7 +180,7 @@ export default function Game11Litres({ onComplete, onBack }) {
       // Pulsing start text with neon
       const pulse = 0.5 + Math.sin(elapsed * 4) * 0.5;
       ctx.globalAlpha = pulse;
-      juice.drawNeonText(ctx, 'TAP TO START', cx, h * 0.62, '#00D4FF', 22);
+      juice.drawNeonText(ctx, t(UI_STRINGS.tapToStart), cx, h * 0.62, '#00D4FF', 22);
       ctx.globalAlpha = 1;
 
       // Glow on water surface
@@ -518,7 +518,7 @@ export default function Game11Litres({ onComplete, onBack }) {
     ctx.shadowBlur = 0;
 
     ctx.restore();
-  }, [phase, sounds, spawnParticles, haptics, juice]));
+  }, [phase, sounds, spawnParticles, haptics, juice, t]));
 
   useEffect(() => {
     if (phase === 'ready') gameLoop.start();
@@ -573,7 +573,7 @@ export default function Game11Litres({ onComplete, onBack }) {
             marginBottom: 16,
             textShadow: `0 0 20px ${isWin ? COLORS.green : COLORS.cyan}, 0 0 40px ${isWin ? COLORS.green : COLORS.cyan}80`,
           }}>
-            {isWin ? 'Pouch Full!' : 'Results'}
+            {isWin ? t(UI_STRINGS.victory) : t(UI_STRINGS.gameOver)}
           </div>
           <div style={{
             color: COLORS.cyan,
@@ -606,7 +606,7 @@ export default function Game11Litres({ onComplete, onBack }) {
             marginBottom: 28,
             textShadow: '0 0 6px rgba(156,163,175,0.4)',
           }}>
-            points
+            {t(UI_STRINGS.points)}
           </div>
           <button
             onClick={() => {
@@ -630,7 +630,7 @@ export default function Game11Litres({ onComplete, onBack }) {
               transition: 'transform 0.1s',
             }}
           >
-            Continue
+            {t(UI_STRINGS.continueBtn)}
           </button>
           <button
             onClick={() => {
@@ -652,7 +652,7 @@ export default function Game11Litres({ onComplete, onBack }) {
               transition: 'transform 0.1s',
             }}
           >
-            Back
+            {t(UI_STRINGS.back)}
           </button>
         </div>
       )}
@@ -671,7 +671,7 @@ export default function Game11Litres({ onComplete, onBack }) {
             WebkitBackdropFilter: 'blur(6px)',
           }}
         >
-          Back
+          {t(UI_STRINGS.back)}
         </button>
       )}
     </div>
