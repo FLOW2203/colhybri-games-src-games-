@@ -100,38 +100,38 @@ export default function useAnalytics() {
     return () => window.removeEventListener('online', handleOnline);
   }, []);
 
-  const trackGameStart = useCallback((gameId, locale) => {
+  const trackGameStart = useCallback((gameSlug, locale) => {
     send({
-      game_id: gameId,
-      event: 'game_start',
+      game_slug: gameSlug,
+      action: 'game_start',
       locale,
       created_at: new Date().toISOString(),
     });
   }, []);
 
-  const trackGameComplete = useCallback((gameId, score, duration) => {
+  const trackGameComplete = useCallback((gameSlug, score, duration) => {
     send({
-      game_id: gameId,
-      event: 'game_complete',
-      score,
-      duration_seconds: Math.round(duration),
+      game_slug: gameSlug,
+      action: 'game_complete',
+      locale: null,
       created_at: new Date().toISOString(),
     });
   }, []);
 
-  const trackGameAbandon = useCallback((gameId, elapsed) => {
+  const trackGameAbandon = useCallback((gameSlug, elapsed) => {
     send({
-      game_id: gameId,
-      event: 'game_abandon',
-      duration_seconds: Math.round(elapsed),
+      game_slug: gameSlug,
+      action: 'game_abandon',
+      locale: null,
       created_at: new Date().toISOString(),
     });
   }, []);
 
-  const trackShare = useCallback((gameId) => {
+  const trackShare = useCallback((gameSlug) => {
     send({
-      game_id: gameId,
-      event: 'share',
+      game_slug: gameSlug,
+      action: 'share',
+      locale: null,
       created_at: new Date().toISOString(),
     });
   }, []);

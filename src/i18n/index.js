@@ -138,6 +138,30 @@ export const UI_STRINGS = {
     fr: 'Classement', en: 'Leaderboard', es: 'Clasificación', de: 'Rangliste', el: 'Κατάταξη',
     zh: '排行榜', ja: 'リーダーボード', hi: 'लीडरबोर्ड', pt: 'Classificação', ru: 'Таблица лидеров',
   },
+  rank: {
+    fr: 'Rang', en: 'Rank', es: 'Rango', de: 'Rang', el: 'Κατάταξη',
+    zh: '排名', ja: 'ランク', hi: 'रैंक', pt: 'Posição', ru: 'Ранг',
+  },
+  profile: {
+    fr: 'Profil', en: 'Profile', es: 'Perfil', de: 'Profil', el: 'Προφίλ',
+    zh: '个人资料', ja: 'プロフィール', hi: 'प्रोफ़ाइल', pt: 'Perfil', ru: 'Профиль',
+  },
+  totalGames: {
+    fr: 'Parties jouées', en: 'Games Played', es: 'Partidas jugadas', de: 'Gespielte Spiele', el: 'Παιχνίδια',
+    zh: '已玩游戏', ja: 'プレイ数', hi: 'खेले गए गेम', pt: 'Jogos jogados', ru: 'Сыграно игр',
+  },
+  totalScore: {
+    fr: 'Score total', en: 'Total Score', es: 'Puntuación total', de: 'Gesamtpunkte', el: 'Συνολικό σκορ',
+    zh: '总分', ja: '合計スコア', hi: 'कुल स्कोर', pt: 'Pontuação total', ru: 'Общий счёт',
+  },
+  streakDays: {
+    fr: 'Jours consécutifs', en: 'Day Streak', es: 'Días seguidos', de: 'Tage in Folge', el: 'Ημέρες σερί',
+    zh: '连续天数', ja: '連続日数', hi: 'लगातार दिन', pt: 'Dias seguidos', ru: 'Дней подряд',
+  },
+  games: {
+    fr: 'Jeux', en: 'Games', es: 'Juegos', de: 'Spiele', el: 'Παιχνίδια',
+    zh: '游戏', ja: 'ゲーム', hi: 'गेम', pt: 'Jogos', ru: 'Игры',
+  },
   chapters: {
     fr: 'Chapitres', en: 'Chapters', es: 'Capítulos', de: 'Kapitel', el: 'Κεφάλαια',
     zh: '章节', ja: 'チャプター', hi: 'अध्याय', pt: 'Capítulos', ru: 'Главы',

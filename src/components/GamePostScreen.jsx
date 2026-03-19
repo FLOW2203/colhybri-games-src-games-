@@ -88,6 +88,7 @@ export default function GamePostScreen({
   fact,
   factSource,
   gameName,
+  rank,
   onReplay,
   onChallenge,
   onMenu,
@@ -134,6 +135,16 @@ export default function GamePostScreen({
         <p className="text-white/40 text-sm mt-1">
           {t(UI_STRINGS.highScore)}: {highScore}
         </p>
+        {rank != null && (
+          <motion.p
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.6 }}
+            className="text-[#0EA5E9] font-bold mt-2 text-sm"
+          >
+            🏆 {t(UI_STRINGS.rank)}: #{rank}
+          </motion.p>
+        )}
       </motion.div>
 
       {/* Points earned */}
